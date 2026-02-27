@@ -1,4 +1,4 @@
-from PyQt6 import QtCore, QtGui, QtWidgets
+from PySide6 import QtCore, QtGui, QtWidgets
 
 from adminWindowUi import Ui_MainWindow
 from catalogueUI import Ui_Form

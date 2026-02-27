@@ -1,4 +1,4 @@
-from PyQt6 import QtCore, QtGui, QtWidgets
+from PySide6 import QtCore, QtGui, QtWidgets
 from addProductDialogUi import Ui_Dialog
 
 class Ui_Form(object):
