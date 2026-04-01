@@ -1,5 +1,5 @@
 from PySide6 import QtCore, QtGui, QtWidgets
-from addProductDialogUi import Ui_Dialog
+from addProductDialog import addProduct
 
 class Ui_Form(object):
     def setupUi(self, Form):
@@ -34,15 +34,6 @@ class Ui_Form(object):
         self.categoriesButton.setFont(font)
         self.categoriesButton.setObjectName("categoriesButton")
         self.menuBar1.addWidget(self.categoriesButton)
-        self.salesButton = QtWidgets.QPushButton(parent=Form)
-        self.salesButton.setMinimumSize(QtCore.QSize(150, 35))
-        self.salesButton.setMaximumSize(QtCore.QSize(400, 35))
-        font = QtGui.QFont()
-        font.setFamily("Bahnschrift")
-        font.setPointSize(14)
-        self.salesButton.setFont(font)
-        self.salesButton.setObjectName("salesButton")
-        self.menuBar1.addWidget(self.salesButton)
         spacerItem = QtWidgets.QSpacerItem(600, 20, QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Minimum)
         self.menuBar1.addItem(spacerItem)
         self.verticalLayout_2.addLayout(self.menuBar1)
@@ -110,7 +101,6 @@ class Ui_Form(object):
         
         self.categoriesButton.clicked.connect(self.on_categoriesButton_clicked)
         self.productsButton.clicked.connect(self.on_productsButton_clicked)
-        self.salesButton.clicked.connect(self.on_salesButton_clicked)
         self.addButton.clicked.connect(self.on_addButton_clicked)
 
     def retranslateUi(self, Form):
@@ -118,7 +108,6 @@ class Ui_Form(object):
         Form.setWindowTitle(_translate("Form", "Form"))
         self.productsButton.setText(_translate("Form", "Изделия"))
         self.categoriesButton.setText(_translate("Form", "Категории изделий"))
-        self.salesButton.setText(_translate("Form", "Акции на изделия"))
         self.allSmthLabel.setText(_translate("Form", "Все изделия"))
         self.searchLabel.setText(_translate("Form", "Поиск по артикулу или наименованию"))
         self.searchButton.setText(_translate("Form", "Поиск"))
@@ -132,13 +121,9 @@ class Ui_Form(object):
         self.allSmthLabel.setText("Все изделия")
         self.searchLabel.setText("Поиск по артикулу или наименованию")
 
-    def on_salesButton_clicked(self):
-        self.allSmthLabel.setText("Все акции")
-        self.searchLabel.setText("Поиск по наименованию акции")
-
     def on_addButton_clicked(self):
         self.addDialog = QtWidgets.QDialog()
-        self.ui_addDialog = Ui_Dialog()
+        self.ui_addDialog = addProduct()
         self.ui_addDialog.setupUi(self.addDialog)
         self.addDialog.show()
 
