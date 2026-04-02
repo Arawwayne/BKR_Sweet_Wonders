@@ -14,10 +14,10 @@ def get_product(products, id):
     return next((p for p in products if p[0] == id), None)
 
 def post_product(data):
-    return client.post("/admin/products/add", data=data)
+    return client.post_data("/admin/products/add", data=data)
 
 def put_product(data):
-    return client.put(f"/admin/products/update", data=data)
+    return client.put_data("/admin/products/update", data=data)
 
 
 #КАТЕГОРИИ
@@ -28,16 +28,16 @@ def get_category(categories, id):
     return next((c for c in categories if c[-1] == id), None)
 
 def post_category(data):
-    return client.post("/admin/categories/add", data=data)
+    return client.post_json("/admin/categories/add", data=data)
 
 def put_category(data):
-    return client.put(f"/admin/categories/update", data=data)
+    return client.put_json(f"/admin/categories/update", data=data)
 
 
 
 def save_response_to_json(response: requests.Response, filename: str = None):
     if filename is None:
-        filename = f"response.json"
+        filename = f"response1.json"
     
     try:
         # Получаем JSON данные из response
@@ -53,4 +53,3 @@ def save_response_to_json(response: requests.Response, filename: str = None):
     except json.JSONDecodeError:
         print("Response не содержит JSON данных")
         return None
-    

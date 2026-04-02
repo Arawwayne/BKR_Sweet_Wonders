@@ -784,12 +784,17 @@ class AddProductDialog(QDialog):
         self.tag = tag
         self.data = product_data
 
-        if self.tag is None:
-            self.tag = 'C'
-            
         self.catalogPage = parent
         self.products_data = self.catalogPage.all_catalog_data
         self.categories_data = self.catalogPage.categories_data
+
+        self.selected_image_path = None
+
+        self.id = max([i[0] for i in self.products_data]) + 1
+
+        if self.tag is None:
+            self.tag = 'C'
+            
 
         if self.tag == "C":
             self.setWindowTitle("Добавить изделие")
@@ -818,6 +823,11 @@ class AddProductDialog(QDialog):
             QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {
                 border-color: #0078d7;
             }
+            QCheckBox::indicator:checked {
+            border: 1px solid #0078d7;
+            background-color: #0078d7;
+            border-radius: 3px;
+            }
         """)
 
         self.init_ui()
@@ -827,7 +837,7 @@ class AddProductDialog(QDialog):
         layout.setSpacing(15)
 
         #Заголовок
-        title = QLabel("Добавление изделия")
+        title = QLabel(f"Добавление изделия | ID: {self.id}")
         title.setAlignment(Qt.AlignCenter)
         title.setStyleSheet("font-size: 16px; font-weight: bold; color: #0078d7; margin-bottom: 10px;")
         layout.addWidget(title)
@@ -853,16 +863,19 @@ class AddProductDialog(QDialog):
         #Категория
         form_layout.addWidget(QLabel("Категория:"), 1, 0)
         self.category_combo = QComboBox()
-        self.category_combo.addItems([c[0] for c in self.categories_data if c[3]])
+        
+        for c in self.categories_data:
+            self.category_combo.addItem(c[0], c[-1])
+        #self.category_combo.addItems([c[0] for c in self.categories_data if c[3]])
         self.category_combo.setEditable(True)
         form_layout.addWidget(self.category_combo, 1, 1)
 
         #Количество на складе
-        form_layout.addWidget(QLabel("Количество:"), 1, 2)
-        self.quantity_spin = QSpinBox()
-        self.quantity_spin.setRange(0, 10000)
-        self.quantity_spin.setSuffix(" шт")
-        form_layout.addWidget(self.quantity_spin, 1, 3)
+        form_layout.addWidget(QLabel("Вес:"), 1, 2)
+        self.weight_spin = QSpinBox()
+        self.weight_spin.setRange(0, 10000)
+        self.weight_spin.setSuffix(" г")
+        form_layout.addWidget(self.weight_spin, 1, 3)
 
         #Цена
         form_layout.addWidget(QLabel("Цена:"), 2, 0)
@@ -989,12 +1002,30 @@ class AddProductDialog(QDialog):
             }
         """)
 
-        layout.addWidget(button_box)
-
         if self.tag == "R":
-            title.setText(f"Просмотр изделия: {self.data[1]}")
-            self.name_input.setText(self.data[1])
+            #Отображение
+            self.show_on_display = QCheckBox("Отображать изделие")
+            self.show_on_display.setChecked(True)
+            layout.addWidget(self.show_on_display)
 
+            self.id = self.data[0]
+            title.setText(f"Просмотр изделия: {self.data[1]} | ID: {self.id}")
+            self.name_input.setText(self.data[1])
+            i = self.category_combo.findData(self.data[2])
+            self.category_combo.setCurrentIndex(i)
+            self.selling_price.setValue(self.data[4])
+            self.cost_price.setValue(self.data[3])
+            self.ingredients_input.setText(self.data[5])
+            self.desc_input.setText(self.data[6])
+            self.calories_spin.setValue(self.data[7])
+            self.proteins_spin.setValue(self.data[8])
+            self.fats_spin.setValue(self.data[9])
+            self.carbs_spin.setValue(self.data[10])
+            self.weight_spin.setValue(self.data[11])
+            self.show_on_display.setChecked(self.data[12])
+            self.selected_image_path = self.data[13]
+
+        layout.addWidget(button_box)
 
     def load_image(self):
         from PySide6.QtWidgets import QFileDialog
@@ -1049,9 +1080,10 @@ class AddProductDialog(QDialog):
         self.accept()
 
     def get_product_data(self):
-        return {
+        data = {
+            "id": self.id,
             "name": self.name_input.text().strip(),
-            "category_id": self.category_combo.currentText(),
+            "category_id": self.category_combo.currentData(),
             "sale_price": self.selling_price.value(),
             "cost_price": self.cost_price.value(),
             "composition": self.ingredients_input.text().strip(),
@@ -1060,11 +1092,12 @@ class AddProductDialog(QDialog):
             "protein": self.proteins_spin.value(),
             "fat": self.fats_spin.value(),
             "carbs": self.carbs_spin.value(),
-            "weight": self.quantity_spin.value(), # тк веса в админке нету, а количества нет на сайте, пока будет так, что количество == вес
+            "weight": self.weight_spin.value(),
             "is_visible": True,
-            "id": 1,
-            "image_url": getattr(self, 'selected_image_path', None)
+            "image_url": self.selected_image_path
         }
+
+        return data
 
 
 
@@ -1080,6 +1113,8 @@ class AddCategoryDialog(QDialog):
             
         self.catalogPage = parent
         self.categories_data = self.catalogPage.categories_data
+
+        self.id = max([i[-1] for i in self.categories_data]) + 1
 
         if self.tag == "C":
             self.setWindowTitle("Добавить категорию")
@@ -1140,7 +1175,9 @@ class AddCategoryDialog(QDialog):
 
         #Порядок категории
         form_layout.addWidget(QLabel("Порядок категории:"), 1, 0)
+        #
         self.order_spin = QSpinBox()
+        self.order_spin.setValue(max([i[-1] for i in self.categories_data]) + 1)
         self.order_spin.setRange(1, 100)
         self.order_spin.setSuffix("")
         form_layout.addWidget(self.order_spin, 1, 1)
@@ -1185,19 +1222,23 @@ class AddCategoryDialog(QDialog):
                 background-color: #5a6268;
             }
         """)
-        layout.addWidget(button_box)
+
+        #Отображение
+        self.show_on_display = QCheckBox("Отображать категорию")
+        self.show_on_display.setChecked(False)
+        layout.addWidget(self.show_on_display) 
 
         if self.tag == "R":
+            self.id = self.data[-1]
             self.name_input.setText(self.data[0])
             self.order_spin.setValue(self.data[1])
             title.setText(f"Категория: {self.data[0]}")
             ok_button.setText("Cохранить")
-
-            #Отображение
-            self.show_on_display = QCheckBox("Отображать категорию")
             self.show_on_display.setChecked(self.data[3])
-            layout.addWidget(self.show_on_display) 
 
+            
+
+        layout.addWidget(button_box)
 
     def validate_and_accept(self):
         new_name = self.name_input.text().strip()
@@ -1238,7 +1279,7 @@ class AddCategoryDialog(QDialog):
           'showing_number': self.order_spin.value(), 
           'category_description': None, 
           'display_on_site': self.show_on_display.isChecked(),
-          'id': self.order_spin.value()
+          'id': self.id
         }
 
 
@@ -1664,14 +1705,6 @@ class CategoryViewDialog(QDialog):
         self.order_spin = QSpinBox()
         self.order_spin.setRange(1, 100)
 
-        # try:
-        #     if len(self.category_data) > 1 and self.category_data[1] is not None:
-        #         order_value = int(self.category_data[1])
-        #     else:
-        #         order_value = 1
-        # except (ValueError, TypeError):
-        #     order_value = 1
-        #     print(f"Ошибка преобразования значения порядка: {self.category_data[1]}")
 
         self.order_spin.setValue(self.category_data[1])
 
@@ -1763,58 +1796,8 @@ class CatalogPage(QWidget):
         #Данные для изделий
         self.all_catalog_data = product_dict_to_list(get_products())
 
-        # for p in self.all_catalog_data:
-        #     print(p)
-        
-        # {
-        #     "name": "Шоколадный пончик",
-        #     "category_id": 1,
-        #     "sale_price": 100.0,
-        #     "cost_price": 30.0,
-        #     "composition": "Тесто, Мука, Молоко, Яйца, Глазурь, Масло",
-        #     "description": "Пончик в шоколадной глазури, покрытый топингом.",
-        #     "calories": 230,
-        #     "protein": 3.0,
-        #     "fat": 45.0,
-        #     "carbs": 21.0,
-        #     "weight": 100,
-        #     "is_visible": True,
-        #     "id": 1,
-        #     "image_url": None
-        # }
-        # self.all_catalog_data = self.dict_to_list(self.all_catalog_data)
-        
-
-        # self.all_catalog_data = [
-        #     ["001", "Синнабон классический", "Синнабоны", "120.00", "100.00", "синнабон, классический, корица", "100"], ]
-
-        #     ["002", "Синнабон с шоколадом", "Синнабоны", "140.00", "110.00", "синнабон, шоколад", "100"],
-        #     ["003", "Синнабон карамельный", "Синнабоны", "135.00", "105.00", "синнабон, карамель", "100"],
-        #     ["004", "Кремобон ванильный", "Кремобоны", "160.00", "130.00", "кремобон, ваниль", "100"],
-        #     ["005", "Кремобон шоколадный", "Кремобоны", "170.00", "150.00", "кремобон, шоколад", "100"],
-        #     ["006", "Кремобон карамельный", "Кремобоны", "165.00", "140.00", "кремобон, карамель", "100"],
-        #     ["007", "Пирожное корзиночка", "Пирожные", "80.00", "60.00", "пирожное, корзиночка", "100"],
-        #     ["008", "Эклер ванильный", "Пирожные", "90.00", "70.00", "эклер, ваниль", "100"],
-        #     ["009", "Профитроли", "Пирожные", "75.00", "40.00", "профитроли, заварные", "100"],
-        #     ["010", "Медовый торт", "Торты", "450.00", "400.00", "торт, медовый", "100"],
-        #     ["011", "Наполеон", "Торты", "500.00", "410.00", "торт, наполеон", "100"],
-        #     ["012", "Капучино", "Напитки", "120.00", "80.00", "кофе, капучино", "100"],
-        #     ["013", "Латте", "Напитки", "130.00", "100.00", "кофе, латте", "100"],
-        #     ["014", "Чай черный", "Напитки", "50.00", "31.00", "чай, черный", "100"],
-        # ]
-
         #Данные для категорий
         self.categories_data = category_dict_to_list(get_categories())
-        
-        # [
-        #     ["Синнабоны", "1"],
-        #     ["Кремобоны", "2"],
-        #     ["Пирожные", "3"],
-        #     ["Торты", "4"],
-        #     ["Напитки", "5"],
-        #     ["Десерты", "6"],
-        #     ["Выпечка", "7"],
-        # ]
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
@@ -2040,16 +2023,13 @@ class CatalogPage(QWidget):
 
     def on_product_double_clicked(self, row, col):
         product_data = get_product(self.all_catalog_data, int(self.products_table.item(row, 0).text()))
-        # for col in range(self.products_table.columnCount()):
-        #     product_data.append(self.products_table.item(row, col).text())
-
-        # if len(self.all_catalog_data[row]) > 5:
-        #     product_data.append(self.all_catalog_data[row][5])  # теги
-        # if len(self.all_catalog_data[row]) > 6:
-        #     product_data.append(self.all_catalog_data[row][6])  # количество
-
         dialog = AddProductDialog(self, tag='R', product_data=product_data)
-        dialog.exec()
+        if dialog.exec() == QDialog.Accepted:
+            product_data = dialog.get_product_data()
+            put_product(product_data)
+            self.update_products_data()
+            QMessageBox.information(self, "Успешно", f"Изделие '{product_data['name']}' обновлено!")
+
 
     def populate_products_table(self, data=None):
         if data is None:
@@ -2061,6 +2041,10 @@ class CatalogPage(QWidget):
             for col, value in enumerate(item_data[:5]):
                 item = QTableWidgetItem(str(value))
                 item.setTextAlignment(Qt.AlignCenter)
+
+                if col == 2:
+                    item.setText(*[c[0] for c in self.categories_data if c[-1] == value])
+
 
                 self.products_table.setItem(row, col, item)
 
@@ -2091,7 +2075,9 @@ class CatalogPage(QWidget):
         dialog = AddProductDialog(self)
         if dialog.exec() == QDialog.Accepted:
             product_data = dialog.get_product_data()
-            #self.add_product(product_data)
+            post_product(product_data)
+            self.update_categories_data()
+            QMessageBox.information(self, "Успешно", f"Изделие '{product_data['name']}' добавлено!")
 
     def add_product(self, data):
         new_article = str(int(self.all_catalog_data[-1][0]) + 1).zfill(3)
@@ -2249,7 +2235,6 @@ class CatalogPage(QWidget):
             put_category(category_data)
             self.update_categories_data()
             QMessageBox.information(self, "Успешно", f"Категория '{category_data['category_name']}' обновлена!")
-            #self.add_category(category_data)
 
     def populate_categories_table(self, data=None):
         if data is None:
