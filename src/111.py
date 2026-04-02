@@ -16,6 +16,8 @@ from PySide6.QtCharts import QChart, QChartView, QPieSeries, QBarSeries, QBarSet
 import random
 from datetime import datetime, timedelta
 
+from CRUD import *
+
 
 #СТРАНИЦА АВТОРИЗАЦИИ
 
@@ -171,7 +173,8 @@ class LoginScreen(QMainWindow):
 
         #Учётные данные для входа
         valid_credentials = {
-            "admin": "admin123"
+            "admin": "admin123",
+            "1": "1"
         }
 
         if login in valid_credentials and valid_credentials[login] == password:
@@ -1023,20 +1026,39 @@ class AddProductDialog(QDialog):
         self.accept()
 
     def get_product_data(self):
+        # return {
+        #     'name': self.name_input.text().strip(),
+        #     'category': self.category_combo.currentText(),
+        #     'cost_price': self.cost_price.value(),
+        #     'selling_price': self.selling_price.value(),
+        #     'quantity': self.quantity_spin.value(),
+        #     'description': self.desc_input.text().strip(),
+        #     'ingredients': self.ingredients_input.text().strip(),
+        #     'calories': self.calories_spin.value(),
+        #     'fats': self.fats_spin.value(),
+        #     'proteins': self.proteins_spin.value(),
+        #     'carbs': self.carbs_spin.value(),
+        #     'image_path': getattr(self, 'selected_image_path', None)
+        # }
+    
         return {
-            'name': self.name_input.text().strip(),
-            'category': self.category_combo.currentText(),
-            'cost_price': self.cost_price.value(),
-            'selling_price': self.selling_price.value(),
-            'quantity': self.quantity_spin.value(),
-            'description': self.desc_input.text().strip(),
-            'ingredients': self.ingredients_input.text().strip(),
-            'calories': self.calories_spin.value(),
-            'fats': self.fats_spin.value(),
-            'proteins': self.proteins_spin.value(),
-            'carbs': self.carbs_spin.value(),
-            'image_path': getattr(self, 'selected_image_path', None)
+            #'article': self.
+            "name": self.name_input.text().strip(),
+            "category_id": self.category_combo.currentText(),
+            "sale_price": self.selling_price.value(),
+            "cost_price": self.cost_price.value(),
+            "composition": self.ingredients_input.text().strip(),
+            "description": self.desc_input.text().strip(),
+            "calories": self.calories_spin.value(),
+            "protein": self.proteins_spin.value(),
+            "fat": self.fats_spin.value(),
+            "carbs": self.carbs_spin.value(),
+            "weight": self.quantity_spin.value(), # тк веса в админке нету, а количества нет на сайте, пока будет так, что количество == вес
+            "is_visible": True,
+            "id": 1,
+            "image_url": getattr(self, 'selected_image_path', None)
         }
+
 
 
 class AddCategoryDialog(QDialog):
@@ -1642,22 +1664,44 @@ class CatalogPage(QWidget):
     def __init__(self):
         super().__init__()
         #Данные для изделий
-        self.all_catalog_data = [
-            ["001", "Синнабон классический", "Синнабоны", "120.00", "100.00", "синнабон, классический, корица", "100"],
-            ["002", "Синнабон с шоколадом", "Синнабоны", "140.00", "110.00", "синнабон, шоколад", "100"],
-            ["003", "Синнабон карамельный", "Синнабоны", "135.00", "105.00", "синнабон, карамель", "100"],
-            ["004", "Кремобон ванильный", "Кремобоны", "160.00", "130.00", "кремобон, ваниль", "100"],
-            ["005", "Кремобон шоколадный", "Кремобоны", "170.00", "150.00", "кремобон, шоколад", "100"],
-            ["006", "Кремобон карамельный", "Кремобоны", "165.00", "140.00", "кремобон, карамель", "100"],
-            ["007", "Пирожное корзиночка", "Пирожные", "80.00", "60.00", "пирожное, корзиночка", "100"],
-            ["008", "Эклер ванильный", "Пирожные", "90.00", "70.00", "эклер, ваниль", "100"],
-            ["009", "Профитроли", "Пирожные", "75.00", "40.00", "профитроли, заварные", "100"],
-            ["010", "Медовый торт", "Торты", "450.00", "400.00", "торт, медовый", "100"],
-            ["011", "Наполеон", "Торты", "500.00", "410.00", "торт, наполеон", "100"],
-            ["012", "Капучино", "Напитки", "120.00", "80.00", "кофе, капучино", "100"],
-            ["013", "Латте", "Напитки", "130.00", "100.00", "кофе, латте", "100"],
-            ["014", "Чай черный", "Напитки", "50.00", "31.00", "чай, черный", "100"],
-        ]
+        self.all_catalog_data = self.dict_to_list(get_products())
+        
+        # {
+        #     "name": "Шоколадный пончик",
+        #     "category_id": 1,
+        #     "sale_price": 100.0,
+        #     "cost_price": 30.0,
+        #     "composition": "Тесто, Мука, Молоко, Яйца, Глазурь, Масло",
+        #     "description": "Пончик в шоколадной глазури, покрытый топингом.",
+        #     "calories": 230,
+        #     "protein": 3.0,
+        #     "fat": 45.0,
+        #     "carbs": 21.0,
+        #     "weight": 100,
+        #     "is_visible": True,
+        #     "id": 1,
+        #     "image_url": None
+        # }
+        # self.all_catalog_data = self.dict_to_list(self.all_catalog_data)
+        
+
+        # self.all_catalog_data = [
+        #     ["001", "Синнабон классический", "Синнабоны", "120.00", "100.00", "синнабон, классический, корица", "100"], ]
+
+        #     ["002", "Синнабон с шоколадом", "Синнабоны", "140.00", "110.00", "синнабон, шоколад", "100"],
+        #     ["003", "Синнабон карамельный", "Синнабоны", "135.00", "105.00", "синнабон, карамель", "100"],
+        #     ["004", "Кремобон ванильный", "Кремобоны", "160.00", "130.00", "кремобон, ваниль", "100"],
+        #     ["005", "Кремобон шоколадный", "Кремобоны", "170.00", "150.00", "кремобон, шоколад", "100"],
+        #     ["006", "Кремобон карамельный", "Кремобоны", "165.00", "140.00", "кремобон, карамель", "100"],
+        #     ["007", "Пирожное корзиночка", "Пирожные", "80.00", "60.00", "пирожное, корзиночка", "100"],
+        #     ["008", "Эклер ванильный", "Пирожные", "90.00", "70.00", "эклер, ваниль", "100"],
+        #     ["009", "Профитроли", "Пирожные", "75.00", "40.00", "профитроли, заварные", "100"],
+        #     ["010", "Медовый торт", "Торты", "450.00", "400.00", "торт, медовый", "100"],
+        #     ["011", "Наполеон", "Торты", "500.00", "410.00", "торт, наполеон", "100"],
+        #     ["012", "Капучино", "Напитки", "120.00", "80.00", "кофе, капучино", "100"],
+        #     ["013", "Латте", "Напитки", "130.00", "100.00", "кофе, латте", "100"],
+        #     ["014", "Чай черный", "Напитки", "50.00", "31.00", "чай, черный", "100"],
+        # ]
 
         #Данные для категорий
         self.categories_data = [
@@ -1690,6 +1734,39 @@ class CatalogPage(QWidget):
         self.catalog_stack.addWidget(self.categories_page)
 
         layout.addWidget(self.catalog_stack)
+
+    def dict_to_list(self, dict):
+        # ["001", "Синнабон классический", "Синнабоны", "120.00", "100.00", "синнабон, классический, корица", "100"],
+        data_list = []
+         # Если передан JSON-строкой, парсим её
+        data = dict
+
+        # Получаем список продуктов
+        products = data.get("products", [])
+        
+        # Создаём многоуровневый список
+        
+        for product in products:
+            # Создаём список для каждого продукта
+            product_data = [
+                product.get("id", 0),
+                product.get("name", ""),
+                product.get("category_id", ""),
+                product.get("cost_price", 0.0),
+                product.get("sale_price", 0.0),
+                product.get("composition", ""),
+                product.get("description", ""),
+                product.get("calories", 0),
+                product.get("protein", 0.0),
+                product.get("fat", 0.0),
+                product.get("carbs", 0.0),
+                product.get("weight", 0),
+                product.get("is_visible", True),
+                product.get("image_url", "")
+            ]
+            data_list.append(product_data)
+
+        return data_list
 
     def create_status_bar(self, layout):
         status_layout = QHBoxLayout()
@@ -1915,8 +1992,8 @@ class CatalogPage(QWidget):
             for col, value in enumerate(item_data[:5]):
                 item = QTableWidgetItem(str(value))
 
-                if col == 0 or col == 3 or col == 4:
-                    item.setTextAlignment(Qt.AlignCenter)
+                #if col == 0 or col == 3 or col == 4:
+                item.setTextAlignment(Qt.AlignCenter)
 
                 self.products_table.setItem(row, col, item)
 

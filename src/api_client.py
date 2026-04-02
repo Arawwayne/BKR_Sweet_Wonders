@@ -14,12 +14,12 @@ class APIClient:
         return response.json()
 
     def post(self, endpoint, data):
-        response = requests.post(f'{self.base_url}/{endpoint}', data=data)
+        response = requests.post(f'{self.base_url}/{endpoint}', json=data)
         self._handle_errors(response)
         return response.json()
     
     def put(self, endpoint, data):
-        response = requests.put(f'{self.base_url}/{endpoint}', data=data)
+        response = requests.put(f'{self.base_url}/{endpoint}', json=data)
         self._handle_errors(response)
         return response.json()
     
