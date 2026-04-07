@@ -1082,7 +1082,7 @@ class AddProductDialog(QDialog):
 
     def get_product_data(self):
         data = {
-            "id": self.id,
+            "product_id": self.id,
             "name": self.name_input.text().strip(),
             "category_id": self.category_combo.currentData(),
             "sale_price": self.selling_price.value(),

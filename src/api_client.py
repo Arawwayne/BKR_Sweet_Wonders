@@ -65,6 +65,7 @@ class APIClient:
                 files=files
             )
             self._handle_errors(response)
+            print('ИЗОБРАЖЕНИЕ ДОБАВЛЕНО')
             return response.json()
             
         except Exception as e:
