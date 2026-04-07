@@ -34,6 +34,18 @@ def put_category(data):
     return client.put_json(f"/admin/categories/update", data=data)
 
 
+#ЗАКАЗЫ (Получить все заказы, доступные сотруднику)
+def get_emp_orders(employee_id):
+    return client.get(f"/admin/orders/{employee_id}")
+
+#Изменить статус заказа
+def put_order_update(data):
+    return client.put_json("/admin/orders/update", data=data)
+
+
+
+
+
 
 def save_response_to_json(response: requests.Response, filename: str = None):
     if filename is None:

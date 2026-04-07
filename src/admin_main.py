@@ -1010,6 +1010,7 @@ class AddProductDialog(QDialog):
 
             self.id = self.data[0]
             title.setText(f"Просмотр изделия: {self.data[1]} | ID: {self.id}")
+            ok_button.setText("Сохранить")
             self.name_input.setText(self.data[1])
             i = self.category_combo.findData(self.data[2])
             self.category_combo.setCurrentIndex(i)

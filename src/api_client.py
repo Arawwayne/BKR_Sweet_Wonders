@@ -31,8 +31,9 @@ class APIClient:
         image_path = data["image_url"]
         print(image_path)
         try:
-            file_handle = open(image_path, 'rb')
-            files = {'image_file': file_handle}
+            if image_path and os.path.exists(image_path):
+                file_handle = open(image_path, 'rb')
+                files = {'image_file': file_handle}
             response = requests.post(
                 f'{self.base_url}/{endpoint}',
                 data=data,
@@ -40,7 +41,11 @@ class APIClient:
             )
             self._handle_errors(response)
             return response.json()
-            
+        
+        except Exception as e:
+            print(f"Ошибка при отправке: {e}")
+            raise
+
         finally:
             if file_handle:
                 file_handle.close()
@@ -51,8 +56,9 @@ class APIClient:
         image_path = data["image_url"]
         print(image_path)
         try:
-            file_handle = open(image_path, 'rb')
-            files = {'image_file': file_handle}
+            if image_path and os.path.exists(image_path):
+                file_handle = open(image_path, 'rb')
+                files = {'image_file': file_handle}
             response = requests.put(
                 f'{self.base_url}/{endpoint}',
                 data=data,
@@ -61,6 +67,10 @@ class APIClient:
             self._handle_errors(response)
             return response.json()
             
+        except Exception as e:
+            print(f"Ошибка при отправке: {e}")
+            raise
+
         finally:
             if file_handle:
                 file_handle.close()
