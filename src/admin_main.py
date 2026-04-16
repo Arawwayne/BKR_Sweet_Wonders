@@ -18,6 +18,7 @@ from datetime import datetime, timedelta
 
 from CRUD import *
 
+employee_id = None
 
 #СТРАНИЦА АВТОРИЗАЦИИ
 
@@ -160,6 +161,10 @@ class LoginScreen(QMainWindow):
     def authenticate(self):
         login = self.login_input.text().strip()
         password = self.password_input.text()
+        login_data = {
+            "username": login,
+            "password": password
+        }
 
         if login == "":
             QMessageBox.warning(self, "Ошибка", "Введите логин")
@@ -170,20 +175,17 @@ class LoginScreen(QMainWindow):
             QMessageBox.warning(self, "Ошибка", "Введите пароль")
             self.password_input.setFocus()
             return
-
-        #Учётные данные для входа
-        valid_credentials = {
-            "admin": "admin123",
-            "1": "1"
-        }
-
-        if login in valid_credentials and valid_credentials[login] == password:
+            
+        try:
+            response = post_employee_auth(login_data)
+            global employee_id 
+            employee_id = response["employee_id"]
             self.login_successful.emit()
             self.close()
-        else:
+        except:
             QMessageBox.critical(
                 self,
-                "Ошибка авторизации",
+                "Ошибка",
                 "Неверный логин или пароль."
             )
             self.password_input.clear()
@@ -198,7 +200,8 @@ class OrderDetailDialog(QDialog):
     def __init__(self, order_data, parent=None):
         super().__init__(parent)
         self.order_data = order_data
-        self.setWindowTitle(f"Заказ: {order_data['order_number']}")
+        self.id = order_data['id']
+        self.setWindowTitle(f"Заказ: {order_data['id']}")
         self.setMinimumSize(600, 500)
         self.setModal(True)
 
@@ -237,7 +240,7 @@ class OrderDetailDialog(QDialog):
         layout.setSpacing(15)
 
         #Заголовок с номером заказа
-        title_label = QLabel(f"Заказ: {self.order_data['order_number']}")
+        title_label = QLabel(f"Заказ: {self.order_data['id']}")
         title_label.setProperty("heading", True)
         title_label.setAlignment(Qt.AlignCenter)
         title_label.setStyleSheet("font-size: 18px; color: #0078d7; margin-bottom: 10px;")
@@ -250,28 +253,34 @@ class OrderDetailDialog(QDialog):
         info_layout.setHorizontalSpacing(20)
 
         row = 0
-        info_layout.addWidget(QLabel("Имя пользователя:"), row, 0)
-        info_layout.addWidget(QLabel(self.order_data['username']), row, 1)
+        self.userid = QLabel(str(self.order_data['user_id']))
+        info_layout.addWidget(QLabel("ID пользователя:"), row, 0)
+        info_layout.addWidget(self.userid, row, 1)
 
         row += 1
+        self.phone = QLabel(self.order_data['phone'])
         info_layout.addWidget(QLabel("Телефон пользователя:"), row, 0)
-        info_layout.addWidget(QLabel(self.order_data['phone']), row, 1)
+        info_layout.addWidget(self.phone, row, 1)
 
         row += 1
         info_layout.addWidget(QLabel("Дата создания заказа:"), row, 0)
-        info_layout.addWidget(QLabel(self.order_data['created_date']), row, 1)
+        self.created = QLabel(self.order_data['created_at'])
+        info_layout.addWidget(self.created, row, 1)
 
         row += 1
         info_layout.addWidget(QLabel("Дата выполнения:"), row, 0)
-        info_layout.addWidget(QLabel(self.order_data['completed_date']), row, 1)
+        self.complete = QLabel(self.order_data['order_datetime'])
+        info_layout.addWidget(self.complete, row, 1)
 
         row = 0
         info_layout.addWidget(QLabel("Наименование заведения:"), row, 2)
-        info_layout.addWidget(QLabel(self.order_data['establishment']), row, 3)
+        self.branch = QLabel(self.order_data['branch_name'])
+        info_layout.addWidget(self.branch, row, 3)
 
         row += 1
         info_layout.addWidget(QLabel("Адрес заведения:"), row, 2)
-        info_layout.addWidget(QLabel(self.order_data['address']), row, 3)
+        self.branch_adress = QLabel(self.order_data['branch_address'])
+        info_layout.addWidget(self.branch_adress, row, 3)
 
         info_layout.setColumnStretch(1, 1)
         info_layout.setColumnStretch(3, 1)
@@ -305,11 +314,11 @@ class OrderDetailDialog(QDialog):
 
         total_label = QLabel("Сумма заказа:")
         total_label.setStyleSheet("font-size: 14px; font-weight: bold;")
-        total_value = QLabel(self.order_data['total'])
-        total_value.setStyleSheet("font-size: 16px; font-weight: bold; color: #0078d7;")
+        self.total_value = QLabel(str(self.order_data['total_ammount']))
+        self.total_value.setStyleSheet("font-size: 16px; font-weight: bold; color: #0078d7;")
 
         total_layout.addWidget(total_label)
-        total_layout.addWidget(total_value)
+        total_layout.addWidget(self.total_value)
         total_layout.addStretch()
 
         layout.addWidget(total_frame)
@@ -321,8 +330,10 @@ class OrderDetailDialog(QDialog):
         status_label.setStyleSheet("font-size: 13px; font-weight: bold;")
 
         self.status_combo = QComboBox()
-        self.status_combo.addItems(["Открыт", "В работе", "Готов", "Завершён", "Отменён"])
-        self.status_combo.setCurrentText(self.order_data['status'])
+        for i, v in enumerate(["Оформлен", "В работе", "Готовый к выдаче", "Завершенный", "Отмененный"]):
+            self.status_combo.addItem(v, i+1)
+        #self.status_combo.addItems(["Оформленный", "В работе", "Готовый к выдаче", "Завершенный", "Отмененный"])
+        self.status_combo.setCurrentIndex(self.order_data['status_id']-1)
         self.status_combo.setFixedWidth(150)
         self.status_combo.setStyleSheet("""
             QComboBox {
@@ -387,7 +398,7 @@ class OrderDetailDialog(QDialog):
         layout.addWidget(button_box)
 
     def populate_items_table(self):
-        items = self.order_data.get('items', [])
+        items = self.order_data.get('product_list', [])
         self.items_table.setRowCount(len(items))
 
         for row, item in enumerate(items):
@@ -397,83 +408,22 @@ class OrderDetailDialog(QDialog):
             quantity_item.setTextAlignment(Qt.AlignCenter)
             self.items_table.setItem(row, 1, quantity_item)
 
-            total_item = QTableWidgetItem(f"{item['total']:.2f}")
+            total_item = QTableWidgetItem(f"{item['total_price']:.2f}")
             total_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
             self.items_table.setItem(row, 2, total_item)
 
     def get_updated_status(self):
-        return self.status_combo.currentText()
+        return {
+            "order_id": self.id,
+            "status_id": self.status_combo.currentData()
+        }
 
 
 class OrdersScreen(QWidget):
     def __init__(self):
         super().__init__()
         self.setMinimumSize(1200, 600)
-        self.all_orders_data = {
-            "00001": {
-                'order_number': '00001',
-                'username': 'Васян',
-                'phone': '+79823145521',
-                'created_date': '09.09.2026',
-                'completed_date': '11:30 12.09.2026',
-                'establishment': 'Мягкая булка 17',
-                'address': 'С. Молочное Ул. Попова 17',
-                'total': '89.00',
-                'status': 'Открыт',
-                'items': [{'name': 'Синнабон корейский', 'quantity': 1, 'total': 89.00}]
-            },
-            "00002": {
-                'order_number': '00002',
-                'username': 'Мария',
-                'phone': '+79229281777',
-                'created_date': '09.09.2026',
-                'completed_date': '17:30 10.09.2026',
-                'establishment': 'Мягкая булка 17',
-                'address': 'С. Молочное Ул. Попова 17',
-                'total': '1000.00',
-                'status': 'В работе',
-                'items': [
-                    {'name': 'Синнабон корейский', 'quantity': 2, 'total': 240.00},
-                    {'name': 'Кремобон карамельный', 'quantity': 1, 'total': 160.00}
-                ]
-            },
-            "00003": {
-                'order_number': '00003',
-                'username': 'Иван Петров',
-                'phone': '+79991234567',
-                'created_date': '10.09.2026',
-                'completed_date': '15:30 10.09.2026',
-                'establishment': 'Мягкая булка 17',
-                'address': 'С. Молочное Ул. Попова 17',
-                'total': '450.00',
-                'status': 'Готов',
-                'items': [{'name': 'Пирожное', 'quantity': 3, 'total': 450.00}]
-            },
-            "00004": {
-                'order_number': '00004',
-                'username': 'Анна Смирнова',
-                'phone': '+79876543210',
-                'created_date': '08.09.2026',
-                'completed_date': '12:00 09.09.2026',
-                'establishment': 'Мягкая булка 17',
-                'address': 'С. Молочное Ул. Попова 17',
-                'total': '1200.00',
-                'status': 'Завершён',
-                'items': [{'name': 'Торт', 'quantity': 1, 'total': 1200.00}]
-            },
-            "00005": {
-                'order_number': '00005',
-                'username': 'Сергей Козлов',
-                'phone': '+79112223344',
-                'created_date': '07.09.2026',
-                'completed_date': '—',
-                'establishment': 'Мягкая булка 17',
-                'address': 'С. Молочное Ул. Попова 17',
-                'total': '300.00',
-                'status': 'Отменён',
-                'items': [{'name': 'Кофе', 'quantity': 2, 'total': 300.00}]
-            }
-        }
+        self.all_orders_data = get_emp_orders(employee_id=employee_id)
 
         #Текущий фильтр
         self.current_filter = "Все заказы"
@@ -505,11 +455,11 @@ class OrdersScreen(QWidget):
 
         self.status_mapping = {
             "Все заказы": None,
-            "Открытые": "Открыт",
-            "В работе": "В работе",
-            "Готовые": "Готов",
-            "Завершённые": "Завершён",
-            "Отменённые": "Отменён"
+            "Открытые": 1,
+            "В работе": 2,
+            "Готовые": 3,
+            "Завершённые": 4,
+            "Отменённые": 5
         }
 
         for status in statuses:
@@ -572,62 +522,63 @@ class OrdersScreen(QWidget):
                     }
                 """)
 
-    def filter_orders(self, status):
+    def filter_orders(self, status = None):
         filter_status = self.status_mapping.get(status)
+        orders_all = get_emp_orders(employee_id=employee_id)
 
         if filter_status is None:
-            filtered_orders = list(self.all_orders_data.values())
+            filtered_orders = orders_all.values()
         else:
             filtered_orders = [
-                order for order in self.all_orders_data.values()
-                if order['status'] == filter_status
+                order for orders in orders_all.values()
+                for order in orders
+                if order['status_name'] == filter_status
             ]
+        self.update_table(list(filtered_orders))
 
-        self.update_table(filtered_orders)
-
-    def update_table(self, orders):
+    def update_table(self, orders_all):
         self.table.setRowCount(0)
 
         display_data = []
-        for order in orders:
-            display_data.append([
-                order['order_number'],
-                order['username'],
-                order['total'],
-                order['phone'],
-                order['created_date'],
-                order['completed_date'],
-                order['status']
-            ])
+        for orders in orders_all:
+            for order in orders:
+                display_data.append([
+                    order['id'],
+                    order['user_id'],
+                    order['total_ammount'],
+                    order['phone'],
+                    order['created_at'],
+                    order['order_datetime'],
+                    order['status_name']
+                ])
 
         display_data.sort(key=lambda x: x[0], reverse=True)
 
         self.table.setRowCount(len(display_data))
 
         for row, order_data in enumerate(display_data):
-            num_item = QTableWidgetItem(order_data[0])
+            num_item = QTableWidgetItem()
+            num_item.setText(str(order_data[0]))
             num_item.setTextAlignment(Qt.AlignCenter)
             self.table.setItem(row, 0, num_item)
 
             for col, value in enumerate(order_data[1:]):
                 item = QTableWidgetItem(str(value))
 
-                if col in [1, 2, 3, 4]:
-                    item.setTextAlignment(Qt.AlignCenter)
-
                 if col == 5:
                     item.setTextAlignment(Qt.AlignCenter)
                     self.color_status_item(item, value)
-
+                    
+                item.setTextAlignment(Qt.AlignCenter)
                 self.table.setItem(row, col + 1, item)
 
     def color_status_item(self, item, status):
         colors = {
-            "Открыт": ("#28a745", "#e8f5e9"),
+            "Оформлен": ("#28a745", "#e8f5e9"),
             "В работе": ("#ff8c00", "#fff3e0"),
-            "Готов": ("#0078d7", "#e6f2fa"),
-            "Завершён": ("#6c757d", "#f8f9fa"),
-            "Отменён": ("#dc3545", "#f8d7da")
+            "Готовый к выдаче": ("#0078d7", "#e6f2fa"),
+            "Завершенный": ("#6c757d", "#f8f9fa"),
+            "Отмененный": ("#dc3545", "#f8d7da")
         }
 
         if status in colors:
@@ -698,7 +649,7 @@ class OrdersScreen(QWidget):
         self.table = QTableWidget()
         self.table.setColumnCount(7)
         self.table.setHorizontalHeaderLabels([
-            "№ Заказа", "Имя пользователя", "Сумма заказа",
+            "№ Заказа", "ID пользователя", "Сумма заказа",
             "Телефон", "Дата создания", "Дата выполнения", "Статус"
         ])
 
@@ -735,16 +686,19 @@ class OrdersScreen(QWidget):
         layout.addWidget(self.table)
 
     def on_order_double_clicked(self, row, column):
-        order_number = self.table.item(row, 0).text()
-        if order_number in self.all_orders_data:
-            dialog = OrderDetailDialog(self.all_orders_data[order_number], self)
-            if dialog.exec() == QDialog.Accepted:
-                new_status = dialog.get_updated_status()
-                self.update_order_status(order_number, new_status)
+        order_data = get_order(order_to_list(self.all_orders_data), int(self.table.item(row, 0).text())) 
+        dialog = OrderDetailDialog(order_data, self)
+        if dialog.exec() == QDialog.Accepted:
+            new_status = dialog.get_updated_status()
+            put_order_update(new_status)
+            #print("Статус изменился!")
+            QMessageBox.information(self, "Успешно", f"Статус заказа '{dialog.id}' обновлён!")
+            self.filter_orders()
+
 
     def update_order_status(self, order_number, new_status):
         if order_number in self.all_orders_data:
-            self.all_orders_data[order_number]['status'] = new_status
+            self.all_orders_data[order_number]['status_name'] = new_status
             self.filter_orders(self.current_filter)
 
     def search_orders(self):
@@ -759,7 +713,7 @@ class OrdersScreen(QWidget):
         else:
             current_orders = [
                 order for order in self.all_orders_data.values()
-                if order['status'] == filter_status
+                if order['status_name'] == filter_status
             ]
 
         #Поиск по тексту
@@ -1284,7 +1238,7 @@ class AddCategoryDialog(QDialog):
         }
 
 
-class ProductViewDialog(QDialog):
+class ProductViewDialog(QDialog): # Не использутеся
     def __init__(self, product_data, parent=None):
         super().__init__(parent)
         self.product_data = product_data
@@ -1626,7 +1580,7 @@ class ProductViewDialog(QDialog):
 
         super().accept()
 
-class CategoryViewDialog(QDialog):
+class CategoryViewDialog(QDialog): # Не используется
     def __init__(self, category_data, parent=None):
         super().__init__(parent)
 
@@ -2713,20 +2667,8 @@ class EmployeeDetailDialog(QDialog):
 class EmployeesPage(QWidget):
     def __init__(self):
         super().__init__()
-        self.all_employees_data = [
-            ["1", "Иванов", "Иван", "Иванович", "+7(999)123-45-67", "ivanov@example.com", "Администратор",
-             "Европейский", "Работает"],
-            ["2", "Петрова", "Мария", "Сергеевна", "+7(999)234-56-78", "petrova@example.com", "Администратор",
-             "Звукоуловитель", "Работает"],
-            ["3", "Сидоров", "Алексей", "Петрович", "+7(999)345-67-89", "sidorov@example.com", "Менеджер",
-             "Октябрьский", "Работает"],
-            ["4", "Козлова", "Елена", "Андреевна", "+7(999)456-78-90", "kozlova@example.com", "Менеджер", "Октябрьский",
-             "В отпуске"],
-            ["5", "Морозов", "Дмитрий", "Николаевич", "+7(999)567-89-01", "morozov@example.com", "Менеджер", "Волжский",
-             "Работает"],
-            ["6", "Волкова", "Анна", "Владимировна", "+7(999)678-90-12", "volkova@example.com", "Менеджер", "Дальний",
-             "На больничном"]
-        ]
+        self.all_employees_data = emp_to_list(get_employees())
+
         self.next_id = len(self.all_employees_data) + 1
 
         layout = QVBoxLayout(self)
@@ -2815,9 +2757,9 @@ class EmployeesPage(QWidget):
 
         #Таблица сотрудников
         self.table = QTableWidget()
-        self.table.setColumnCount(9)
+        self.table.setColumnCount(6)
         self.table.setHorizontalHeaderLabels([
-            "ID", "Фамилия", "Имя", "Отчество", "Телефон", "Корпоративная почта", "Должность", "Филиал", "Статус"
+            "ID", "Фамилия", "Имя", "Отчество", "Телефон", "Должность"
         ])
 
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
@@ -2861,25 +2803,11 @@ class EmployeesPage(QWidget):
 
         for row, emp_data in enumerate(data):
             for col, value in enumerate(emp_data):
+
+
                 item = QTableWidgetItem(str(value))
 
-                if col == 0 or col == 8:
-                    item.setTextAlignment(Qt.AlignCenter)
-
-                if col == 8:  # Статус
-                    if value == "Работает":
-                        item.setForeground(QColor("#28a745"))
-                        item.setBackground(QColor("#e8f5e9"))
-                    elif value == "В отпуске":
-                        item.setForeground(QColor("#ff8c00"))
-                        item.setBackground(QColor("#fff3e0"))
-                    elif value == "На больничном":
-                        item.setForeground(QColor("#dc3545"))
-                        item.setBackground(QColor("#f8d7da"))
-                    elif value == "Уволен":
-                        item.setForeground(QColor("#6c757d"))
-                        item.setBackground(QColor("#f8f9fa"))
-
+                item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                 self.table.setItem(row, col, item)
 
     def search_employees(self):
@@ -4812,9 +4740,41 @@ def category_dict_to_list(dict):
 
     return data_list
 
+def order_to_list(orders_all):
+    redacted = [
+        order for orders in orders_all.values()
+        for order in orders
+    ]
+    return redacted
 
+def emp_to_list(dict):
+    data_list = []
+    # Если передан JSON-строкой, парсим её
+    data = dict
 
+    # Получаем список продуктов
+    try:
+        employees = data.get("employees", [])
+    except:
+        employees = data
+    
+    for employee in employees:
+        employees_data = [
+            employee.get("id", 0),
+            employee.get("full_name", ""),
+            employee.get("phone", ""),
+            employee.get("position", ""),
+            employee.get("username", ""),
+            employee.get("branch_id", 0),
+            employee.get("work_address", ""),
+        ]
+        listname = ["", "", ""]
+        name = employees_data[1].split()
+        listname[0:len(name)] = name
+        employees_data[1:2] = listname
+        data_list.append(employees_data)
 
+    return data_list
 
 def main():
     controller = ApplicationController()
