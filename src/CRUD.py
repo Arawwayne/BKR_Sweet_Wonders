@@ -66,6 +66,9 @@ def del_employee(employee_id):
     return client.delete(f"/admin/employees/delete/{employee_id}")
 
 
+#Филиалы
+def get_branches():
+    return client.get(f"/admin/branches")
 
 
 def save_response_to_json(response: requests.Response, filename: str = None):
@@ -86,3 +89,5 @@ def save_response_to_json(response: requests.Response, filename: str = None):
     except json.JSONDecodeError:
         print("Response не содержит JSON данных")
         return None
+
+#save_response_to_json(get_employee(1))

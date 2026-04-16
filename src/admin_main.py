@@ -18,7 +18,8 @@ from datetime import datetime, timedelta
 
 from CRUD import *
 
-employee_id = None
+session_employee_id = None
+session_access = None
 
 #СТРАНИЦА АВТОРИЗАЦИИ
 
@@ -178,8 +179,10 @@ class LoginScreen(QMainWindow):
             
         try:
             response = post_employee_auth(login_data)
-            global employee_id 
-            employee_id = response["employee_id"]
+            global session_employee_id, session_access
+            session_employee_id = response["employee_id"]
+            session_access = get_employee(session_employee_id)["employee"]['position']
+            print(session_access)
             self.login_successful.emit()
             self.close()
         except:
@@ -189,7 +192,7 @@ class LoginScreen(QMainWindow):
                 "Неверный логин или пароль."
             )
             self.password_input.clear()
-            self.password_input.setFocus()
+            self.password_input.setFocus()      
 
 
 #ОСНОВНОЕ ПРИЛОЖЕНИЕ
@@ -423,7 +426,7 @@ class OrdersScreen(QWidget):
     def __init__(self):
         super().__init__()
         self.setMinimumSize(1200, 600)
-        self.all_orders_data = get_emp_orders(employee_id=employee_id)
+        self.all_orders_data = get_emp_orders(employee_id=session_employee_id)
 
         #Текущий фильтр
         self.current_filter = "Все заказы"
@@ -524,7 +527,7 @@ class OrdersScreen(QWidget):
 
     def filter_orders(self, status = None):
         filter_status = self.status_mapping.get(status)
-        orders_all = get_emp_orders(employee_id=employee_id)
+        orders_all = get_emp_orders(employee_id=session_employee_id)
 
         if filter_status is None:
             filtered_orders = orders_all.values()
@@ -691,7 +694,6 @@ class OrdersScreen(QWidget):
         if dialog.exec() == QDialog.Accepted:
             new_status = dialog.get_updated_status()
             put_order_update(new_status)
-            #print("Статус изменился!")
             QMessageBox.information(self, "Успешно", f"Статус заказа '{dialog.id}' обновлён!")
             self.filter_orders()
 
@@ -2253,6 +2255,11 @@ class CatalogPage(QWidget):
 class AddEmployeeDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
+
+        self.all_branches_data = branches_to_list(get_branches())
+        self.all_employees_data = emp_to_list(get_employees())
+        self.employee_id = max([i[0] for i in self.all_employees_data]) + 1
+
         self.setWindowTitle("Добавить сотрудника")
         self.setMinimumSize(500, 500)
         self.setModal(True)
@@ -2282,7 +2289,7 @@ class AddEmployeeDialog(QDialog):
         layout.setSpacing(15)
 
         #Заголовок
-        title = QLabel("Добавление сотрудника")
+        title = QLabel(f"Добавление сотрудника ID: {self.employee_id}")
         title.setAlignment(Qt.AlignCenter)
         title.setStyleSheet("font-size: 16px; font-weight: bold; color: #0078d7; margin-bottom: 10px;")
         layout.addWidget(title)
@@ -2330,22 +2337,24 @@ class AddEmployeeDialog(QDialog):
         self.phone_input.setPlaceholderText("+7(999)123-45-67")
         form_layout.addWidget(self.phone_input, 5, 1)
 
-        #Почта
-        form_layout.addWidget(QLabel("Почта:"), 6, 0)
-        self.email_input = QLineEdit()
-        self.email_input.setPlaceholderText("Введите корпоративную почту сотрудника")
-        form_layout.addWidget(self.email_input, 6, 1)
-
         #Должность
         form_layout.addWidget(QLabel("Должность:"), 7, 0)
         self.position_combo = QComboBox()
         self.position_combo.addItems(["Администратор", "Менеджер"])
         form_layout.addWidget(self.position_combo, 7, 1)
 
+        #Адрес филиала
+        form_layout.addWidget(QLabel("Адресс филиала:"), 9, 0)
+        self.work_address = QLabel()
+        form_layout.addWidget(self.work_address, 9, 1)
+
         #Филиал
         form_layout.addWidget(QLabel("Филиал:"), 8, 0)
         self.branch_combo = QComboBox()
-        self.branch_combo.addItems(["Европейский", "Звукоуловитель", "Октябрьский", "Волжский", "Дальний", "Нагорский", "Дульсе"])
+        for br in self.all_branches_data:
+            self.branch_combo.addItem(br[0], br[-1])
+        self.on_item_changed()
+        self.branch_combo.currentIndexChanged.connect(self.on_item_changed)
         form_layout.addWidget(self.branch_combo, 8, 1)
 
         layout.addWidget(form_widget)
@@ -2391,6 +2400,14 @@ class AddEmployeeDialog(QDialog):
 
         layout.addWidget(button_box)
 
+    def on_item_changed(self):
+        name = self.branch_combo.currentData()
+        for branch in self.all_branches_data:
+            if branch[-1] == name:
+                name = branch[1]
+                break
+        self.work_address.setText(name)
+
     def validate_and_accept(self):
         if not self.lastname_input.text().strip():
             QMessageBox.warning(self, "Ошибка", "Введите фамилию сотрудника")
@@ -2407,24 +2424,17 @@ class AddEmployeeDialog(QDialog):
             self.phone_input.setFocus()
             return
 
-        if not self.email_input.text().strip():
-            QMessageBox.warning(self, "Ошибка", "Введите email сотрудника")
-            self.email_input.setFocus()
-            return
-
         self.accept()
 
     def get_employee_data(self):
         return {
-            'lastname': self.lastname_input.text().strip(),
-            'firstname': self.firstname_input.text().strip(),
-            'patronymic': self.patronymic_input.text().strip(),
-            'login': self.login_input.text().strip(),
-            'password': self.password_input.text(),
+            'id': self.employee_id,
+            'full_name': f'{self.lastname_input.text().strip()} {self.firstname_input.text().strip()} {self.patronymic_input.text().strip()}',
             'phone': self.phone_input.text().strip(),
-            'email': self.email_input.text().strip(),
             'position': self.position_combo.currentText(),
-            'branch': self.branch_combo.currentText()
+            'username': self.login_input.text().strip(),
+            'password': self.password_input.text().strip(),
+            'branch_id': self.branch_combo.currentData()
         }
 
 
@@ -2433,9 +2443,13 @@ class EmployeeDetailDialog(QDialog):
 
     def __init__(self, employee_data, parent=None):
         super().__init__(parent)
+
+        self.all_branches_data = branches_to_list(get_branches())
+
+
         self.employee_data = employee_data
         self.employee_id = employee_data[0] if employee_data else 0
-        self.setWindowTitle(f"Сотрудник: {employee_data[1]} {employee_data[2]}")
+        self.setWindowTitle(f"Сотрудник: {self.employee_id}")
         self.setMinimumSize(500, 550)
         self.setModal(True)
 
@@ -2553,18 +2567,13 @@ class EmployeeDetailDialog(QDialog):
 
         #Логин
         info_layout.addWidget(QLabel("Логин:"), 4, 0)
-        self.login_input = QLineEdit(self.employee_data[4] if len(self.employee_data) > 4 else "")
+        self.login_input = QLineEdit(self.employee_data[6] if len(self.employee_data) > 6 else "")
         info_layout.addWidget(self.login_input, 4, 1)
 
         #Телефон
         info_layout.addWidget(QLabel("Телефон:"), 5, 0)
         self.phone_input = QLineEdit(self.employee_data[4] if len(self.employee_data) > 4 else "")
         info_layout.addWidget(self.phone_input, 5, 1)
-
-        #Email
-        info_layout.addWidget(QLabel("Email:"), 6, 0)
-        self.email_input = QLineEdit(self.employee_data[5] if len(self.employee_data) > 5 else "")
-        info_layout.addWidget(self.email_input, 6, 1)
 
         #Должность
         info_layout.addWidget(QLabel("Должность:"), 7, 0)
@@ -2573,20 +2582,18 @@ class EmployeeDetailDialog(QDialog):
         self.position_combo.setCurrentText(self.employee_data[6] if len(self.employee_data) > 6 else "Менеджер")
         info_layout.addWidget(self.position_combo, 7, 1)
 
+        #Адрес филиала
+        info_layout.addWidget(QLabel("Адресс филиала:"), 9, 0)
+        self.work_address = QLabel()
+        info_layout.addWidget(self.work_address, 9, 1)
+
         #Филиал
         info_layout.addWidget(QLabel("Филиал:"), 8, 0)
         self.branch_combo = QComboBox()
-        self.branch_combo.addItems(
-            ["Европейский", "Звукоуловитель", "Октябрьский", "Волжский", "Дальний", "Нагорский", "Дульсе"])
-        self.branch_combo.setCurrentText(self.employee_data[7] if len(self.employee_data) > 7 else "Европейский")
+        for br in self.all_branches_data:
+            self.branch_combo.addItem(br[0], br[-1])
+        self.on_item_changed()
         info_layout.addWidget(self.branch_combo, 8, 1)
-
-        #Статус сотрудника
-        info_layout.addWidget(QLabel("Статус:"), 9, 0)
-        self.status_combo = QComboBox()
-        self.status_combo.addItems(["Работает", "В отпуске", "На больничном", "Уволен"])
-        self.status_combo.setCurrentText(self.employee_data[8] if len(self.employee_data) > 8 else "Работает")
-        info_layout.addWidget(self.status_combo, 9, 1)
 
         layout.addWidget(info_group)
 
@@ -2612,6 +2619,14 @@ class EmployeeDetailDialog(QDialog):
 
         layout.addLayout(button_layout)
 
+    def on_item_changed(self):
+        name = self.branch_combo.currentData()
+        for branch in self.all_branches_data:
+            if branch[-1] == name:
+                name = branch[1]
+                break
+        self.work_address.setText(name)
+
     def save_employee(self):
         #Проверка обязательных полей
         if not self.lastname_input.text().strip():
@@ -2627,11 +2642,6 @@ class EmployeeDetailDialog(QDialog):
         if not self.phone_input.text().strip():
             QMessageBox.warning(self, "Ошибка", "Введите телефон сотрудника")
             self.phone_input.setFocus()
-            return
-
-        if not self.email_input.text().strip():
-            QMessageBox.warning(self, "Ошибка", "Введите email сотрудника")
-            self.email_input.setFocus()
             return
 
         self.accept()
@@ -2652,15 +2662,12 @@ class EmployeeDetailDialog(QDialog):
     def get_updated_data(self):
         return {
             'id': self.employee_id,
-            'lastname': self.lastname_input.text().strip(),
-            'firstname': self.firstname_input.text().strip(),
-            'patronymic': self.patronymic_input.text().strip(),
-            'login': self.login_input.text().strip(),
+            'full_name': f'{self.lastname_input.text().strip()} {self.firstname_input.text().strip()} {self.patronymic_input.text().strip()}',
             'phone': self.phone_input.text().strip(),
-            'email': self.email_input.text().strip(),
             'position': self.position_combo.currentText(),
-            'branch': self.branch_combo.currentText(),
-            'status': self.status_combo.currentText()
+            'username': self.login_input.text().strip(),
+            'branch_id': self.branch_combo.currentData(),
+            'work_address': self.work_address.text()
         }
 
 
@@ -2797,7 +2804,7 @@ class EmployeesPage(QWidget):
 
     def populate_employees(self, data=None):
         if data is None:
-            data = self.all_employees_data
+            data = emp_to_list(get_employees())
 
         self.table.setRowCount(len(data))
 
@@ -2840,37 +2847,13 @@ class EmployeesPage(QWidget):
             self.add_employee(employee_data)
 
     def add_employee(self, data):
-        new_employee = [
-            str(self.next_id),
-            data['lastname'],
-            data['firstname'],
-            data['patronymic'],
-            data['phone'],
-            data['email'],
-            data['position'],
-            data['branch'],
-            "Работает"
-        ]
-        self.all_employees_data.append(new_employee)
-        self.next_id += 1
-        self.filter_employees_by_status(self.status_filter.currentText())
-        QMessageBox.information(self, "Успешно", f"Сотрудник {data['lastname']} {data['firstname']} добавлен!")
+        post_employee(data=data)
+        QMessageBox.information(self, "Успешно", f"Сотрудник {data['full_name']} добавлен!")
+        self.populate_employees()
 
     def on_employee_double_clicked(self, row, column):
-        employee_id = self.table.item(row, 0).text()
-        employee_lastname = self.table.item(row, 1).text()
-        employee_firstname = self.table.item(row, 2).text()
-        employee_patronymic = self.table.item(row, 3).text()
-        employee_phone = self.table.item(row, 4).text()
-        employee_email = self.table.item(row, 5).text()
-        employee_position = self.table.item(row, 6).text()
-        employee_branch = self.table.item(row, 7).text()
-        employee_status = self.table.item(row, 8).text()
-
-        employee_data = [
-            employee_id, employee_lastname, employee_firstname, employee_patronymic,
-            employee_phone, employee_email, employee_position, employee_branch, employee_status
-        ]
+        employee_id = int(self.table.item(row, 0).text())
+        employee_data = emp_to_list(get_employee(employee_id=employee_id))
         dialog = EmployeeDetailDialog(employee_data, self)
 
         dialog.employee_deleted.connect(self.delete_employee)
@@ -2880,31 +2863,13 @@ class EmployeesPage(QWidget):
             self.update_employee_data(employee_id, updated_data)
 
     def delete_employee(self, employee_id):
-        for i, emp in enumerate(self.all_employees_data):
-            if int(emp[0]) == employee_id:
-                del self.all_employees_data[i]
-                break
-
-        self.filter_employees_by_status(self.status_filter.currentText())
-
+        del_employee(employee_id=employee_id)
         QMessageBox.information(self, "Успешно", f"Сотрудник удален из системы")
 
     def update_employee_data(self, employee_id, updated_data):
-
-        for i, emp in enumerate(self.all_employees_data):
-            if emp[0] == employee_id:
-                self.all_employees_data[i][1] = updated_data['lastname']
-                self.all_employees_data[i][2] = updated_data['firstname']
-                self.all_employees_data[i][3] = updated_data['patronymic']
-                self.all_employees_data[i][4] = updated_data['phone']
-                self.all_employees_data[i][5] = updated_data['email']
-                self.all_employees_data[i][6] = updated_data['position']
-                self.all_employees_data[i][7] = updated_data['branch']
-                self.all_employees_data[i][8] = updated_data['status']
-                break
-
-        self.filter_employees_by_status(self.status_filter.currentText())
+        put_employee(employee_id=employee_id, data=updated_data)
         QMessageBox.information(self, "Успешно", "Данные сотрудника обновлены")
+        self.populate_employees()
 
 
 class UserDetailDialog(QDialog):
@@ -4662,6 +4627,145 @@ class MainApplication(QMainWindow):
         self.show()
 
 
+class MainApplicationManager(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Панель менеджера")
+        self.setMinimumSize(1200, 600)
+
+        #Центральный виджет со стеком страниц
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        main_layout = QVBoxLayout(central_widget)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        #Верхняя панель
+        self.create_top_navbar(main_layout)
+
+        #Стек страниц
+        self.stacked_widget = QStackedWidget()
+        main_layout.addWidget(self.stacked_widget)
+
+        #Все страницы
+        self.orders_page = OrdersScreen()
+
+        #Добавление страниц в стек
+        self.stacked_widget.addWidget(self.orders_page)
+
+        #Показываем страницу заказов по умолчанию
+        self.stacked_widget.setCurrentWidget(self.orders_page)
+
+    def create_top_navbar(self, layout):
+        navbar_widget = QWidget()
+        navbar_widget.setStyleSheet("background-color: white; border-bottom: 1px solid #e0e0e0;")
+        navbar_layout = QHBoxLayout(navbar_widget)
+        navbar_layout.setContentsMargins(20, 10, 20, 10)
+        navbar_layout.setSpacing(20)
+
+        self.nav_buttons = {}
+        sections = ["Заказы"]
+
+        for section in sections:
+            btn = QPushButton(section)
+            btn.setFlat(True)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setStyleSheet("""
+                QPushButton {
+                    font-size: 11px;
+                    color: #666;
+                    padding: 5px 10px;
+                }
+                QPushButton:hover {
+                    color: #0078d7;
+                }
+            """)
+
+            btn.clicked.connect(lambda checked, s=section: self.switch_page(s))
+
+            self.nav_buttons[section] = btn
+            navbar_layout.addWidget(btn)
+
+        navbar_layout.addStretch()
+
+        #Контейнер для пользователя и кнопки выхода
+        user_container = QHBoxLayout()
+        user_container.setSpacing(10)
+
+        user_label = QLabel("manager")
+        user_label.setStyleSheet(
+            "padding: 5px 10px; background-color: #f0f0f0; border-radius: 3px; font-size: 11px;")
+        user_container.addWidget(user_label)
+
+        self.logout_btn = QPushButton("Выйти")
+        self.logout_btn.setFixedSize(60, 30)
+        self.logout_btn.setCursor(Qt.PointingHandCursor)
+        self.logout_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #dc3545;
+                color: white;
+                border: none;
+                border-radius: 3px;
+                font-size: 10px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #c82333;
+            }
+        """)
+        self.logout_btn.clicked.connect(self.logout)
+        user_container.addWidget(self.logout_btn)
+
+        navbar_layout.addLayout(user_container)
+
+        layout.addWidget(navbar_widget)
+
+    def switch_page(self, page_name):
+        if page_name == "Заказы":
+            self.stacked_widget.setCurrentWidget(self.orders_page)
+
+        #Обновляем стиль кнопок
+        for section, btn in self.nav_buttons.items():
+            if section == page_name:
+                btn.setStyleSheet("""
+                    QPushButton {
+                        font-size: 11px;
+                        color: #0078d7;
+                        font-weight: bold;
+                        padding: 5px 10px;
+                    }
+                """)
+            else:
+                btn.setStyleSheet("""
+                    QPushButton {
+                        font-size: 11px;
+                        color: #666;
+                        padding: 5px 10px;
+                    }
+                    QPushButton:hover {
+                        color: #0078d7;
+                    }
+                """)
+
+    def logout(self):
+        reply = QMessageBox.question(
+            self,
+            "Подтверждение",
+            "Вы действительно хотите выйти из системы?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+
+        if reply == QMessageBox.Yes:
+            self.close()
+            #Показываем окно авторизации
+            login_window = LoginScreen()
+            login_window.login_successful.connect(self.show_main_after_login)
+            login_window.show()
+
+    def show_main_after_login(self):
+        self.show()
+
+
 class ApplicationController:
     def __init__(self):
         self.app = QApplication(sys.argv)
@@ -4673,7 +4777,10 @@ class ApplicationController:
         self.main_window = None
 
     def show_main_window(self):
-        self.main_window = MainApplication()
+        if session_access == "Администратор":
+            self.main_window = MainApplication()
+        elif session_access == "Менеджер":
+            self.main_window = MainApplicationManager()
         self.main_window.show()
 
     def run(self):
@@ -4717,6 +4824,7 @@ def product_dict_to_list(dict):
 
     return data_list
 
+
 def category_dict_to_list(dict):
     data_list = []
     data = dict
@@ -4740,6 +4848,7 @@ def category_dict_to_list(dict):
 
     return data_list
 
+
 def order_to_list(orders_all):
     redacted = [
         order for orders in orders_all.values()
@@ -4747,34 +4856,76 @@ def order_to_list(orders_all):
     ]
     return redacted
 
+
 def emp_to_list(dict):
     data_list = []
-    # Если передан JSON-строкой, парсим её
     data = dict
 
-    # Получаем список продуктов
     try:
         employees = data.get("employees", [])
+        if employees == []:
+            employees = data.get("employee")
+            employees = employees
     except:
         employees = data
-    
-    for employee in employees:
+    if isinstance(employees, list):
+        for employee in employees:
+            employees_data = [
+                employee.get("id", 0),
+                employee.get("full_name", ""),
+                employee.get("phone", ""),
+                employee.get("position", ""),
+                employee.get("username", ""),
+                employee.get("branch_id", 0),
+                employee.get("work_address", ""),
+            ]
+            listname = ["", "", ""]
+            name = employees_data[1].split()
+            listname[0:len(name)] = name
+            employees_data[1:2] = listname
+            data_list.append(employees_data)
+    else:
         employees_data = [
-            employee.get("id", 0),
-            employee.get("full_name", ""),
-            employee.get("phone", ""),
-            employee.get("position", ""),
-            employee.get("username", ""),
-            employee.get("branch_id", 0),
-            employee.get("work_address", ""),
+            employees.get("id", 0),
+            employees.get("full_name", ""),
+            employees.get("phone", ""),
+            employees.get("position", ""),
+            employees.get("username", ""),
+            employees.get("branch_id", 0),
+            employees.get("work_address", ""),
         ]
         listname = ["", "", ""]
         name = employees_data[1].split()
         listname[0:len(name)] = name
         employees_data[1:2] = listname
-        data_list.append(employees_data)
+        return employees_data
 
     return data_list
+
+
+def branches_to_list(dict):
+    data_list = []
+    data = dict
+
+    try:
+        branches = data.get("branches", [])
+    except:
+        branches = data
+    
+    # Создаём многоуровневый список
+    
+    for br in branches:
+        br_data = [
+            br.get("branches_name", ""),
+            br.get("branches_address", ""),
+            br.get("branches_phone", ""),
+            br.get("is_active_for_order", True),
+            br.get("id", 0)
+        ]
+        data_list.append(br_data)
+
+    return data_list
+
 
 def main():
     controller = ApplicationController()
