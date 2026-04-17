@@ -1986,11 +1986,12 @@ class CatalogPage(QWidget):
             put_product(product_data)
             self.update_products_data()
             QMessageBox.information(self, "Успешно", f"Изделие '{product_data['name']}' обновлено!")
+            self.populate_categories_table()
 
 
     def populate_products_table(self, data=None):
         if data is None:
-            data = self.all_catalog_data
+            data = self.all_catalog_data = product_dict_to_list(get_products())
 
         self.products_table.setRowCount(len(data))
 
@@ -2035,6 +2036,7 @@ class CatalogPage(QWidget):
             post_product(product_data)
             self.update_categories_data()
             QMessageBox.information(self, "Успешно", f"Изделие '{product_data['name']}' добавлено!")
+            self.populate_products_table()
 
     def add_product(self, data):
         new_article = str(int(self.all_catalog_data[-1][0]) + 1).zfill(3)
@@ -2192,10 +2194,11 @@ class CatalogPage(QWidget):
             put_category(category_data)
             self.update_categories_data()
             QMessageBox.information(self, "Успешно", f"Категория '{category_data['category_name']}' обновлена!")
+            self.populate_categories_table()
 
     def populate_categories_table(self, data=None):
         if data is None:
-            data = self.categories_data
+            data = self.categories_data = category_dict_to_list(get_categories())
 
         self.categories_table.setRowCount(len(data))
 
@@ -2258,7 +2261,7 @@ class AddEmployeeDialog(QDialog):
 
         self.all_branches_data = branches_to_list(get_branches())
         self.all_employees_data = emp_to_list(get_employees())
-        self.employee_id = max([i[0] for i in self.all_employees_data]) + 1
+        #self.employee_id = max([i[0] for i in self.all_employees_data]) + 1
 
         self.setWindowTitle("Добавить сотрудника")
         self.setMinimumSize(500, 500)
@@ -2289,7 +2292,7 @@ class AddEmployeeDialog(QDialog):
         layout.setSpacing(15)
 
         #Заголовок
-        title = QLabel(f"Добавление сотрудника ID: {self.employee_id}")
+        title = QLabel(f"Добавление сотрудника")
         title.setAlignment(Qt.AlignCenter)
         title.setStyleSheet("font-size: 16px; font-weight: bold; color: #0078d7; margin-bottom: 10px;")
         layout.addWidget(title)
@@ -2428,7 +2431,6 @@ class AddEmployeeDialog(QDialog):
 
     def get_employee_data(self):
         return {
-            'id': self.employee_id,
             'full_name': f'{self.lastname_input.text().strip()} {self.firstname_input.text().strip()} {self.patronymic_input.text().strip()}',
             'phone': self.phone_input.text().strip(),
             'position': self.position_combo.currentText(),
@@ -2865,6 +2867,7 @@ class EmployeesPage(QWidget):
     def delete_employee(self, employee_id):
         del_employee(employee_id=employee_id)
         QMessageBox.information(self, "Успешно", f"Сотрудник удален из системы")
+        self.populate_employees()
 
     def update_employee_data(self, employee_id, updated_data):
         put_employee(employee_id=employee_id, data=updated_data)

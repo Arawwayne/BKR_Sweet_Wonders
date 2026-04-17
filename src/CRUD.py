@@ -90,4 +90,4 @@ def save_response_to_json(response: requests.Response, filename: str = None):
         print("Response не содержит JSON данных")
         return None
 
-#save_response_to_json(get_employee(1))
+#save_response_to_json(get_employees())
