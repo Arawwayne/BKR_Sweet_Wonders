@@ -31,6 +31,15 @@ class APIClient:
         image_path = data["image_url"]
         print(image_path)
         try:
+            if image_path is None:
+                response = requests.put(
+                f'{self.base_url}/{endpoint}',
+                data=data,
+                files=files
+            )
+                self._handle_errors(response)
+                return response.json()
+
             if image_path and os.path.exists(image_path):
                 file_handle = open(image_path, 'rb')
                 files = {'image_file': file_handle}
@@ -56,6 +65,15 @@ class APIClient:
         image_path = data["image_url"]
         print(image_path)
         try:
+            if image_path is None:
+                response = requests.put(
+                f'{self.base_url}/{endpoint}',
+                data=data,
+                files=files
+            )
+                self._handle_errors(response)
+                return response.json()
+            
             if image_path and os.path.exists(image_path):
                 file_handle = open(image_path, 'rb')
                 files = {'image_file': file_handle}
@@ -65,7 +83,6 @@ class APIClient:
                 files=files
             )
             self._handle_errors(response)
-            print('ИЗОБРАЖЕНИЕ ДОБАВЛЕНО')
             return response.json()
             
         except Exception as e:

@@ -6,18 +6,13 @@ from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLineEdit, QTableWidget, QTableWidgetItem, QHeaderView,
     QLabel, QFrame, QDialog, QGridLayout, QComboBox, QMessageBox,
-    QDialogButtonBox, QGroupBox, QStackedWidget, QTabWidget, QListWidget,
-    QListWidgetItem, QTextEdit, QDateEdit, QSpinBox, QDoubleSpinBox,
-    QCheckBox, QRadioButton, QButtonGroup, QSplitter, QTreeWidget,
-    QTreeWidgetItem, QProgressBar, QSlider, QDial, QFileDialog, QScrollArea, QTextEdit
+    QDialogButtonBox, QGroupBox, QStackedWidget, QSpinBox, QDoubleSpinBox,
+    QCheckBox
 )
-from PySide6.QtCore import Qt, QSize, Signal, QDate, QTimer
-from PySide6.QtGui import QFont, QColor, QIcon, QPixmap, QPainter, QPen
-from PySide6.QtCharts import QChart, QChartView, QPieSeries, QBarSeries, QBarSet, QBarCategoryAxis, QValueAxis
-import random
-from datetime import datetime, timedelta
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QColor
 
-from CRUD import *
+from crud import *
 
 session_employee_id = None
 session_access = None
@@ -431,7 +426,7 @@ class OrdersScreen(QWidget):
     def __init__(self):
         super().__init__()
         self.setMinimumSize(1200, 600)
-        self.all_orders_data = get_emp_orders(employee_id=session_employee_id)
+        self.orders_data = []
 
         #Текущий фильтр
         self.current_filter = "Все заказы"
@@ -450,27 +445,38 @@ class OrdersScreen(QWidget):
         self.create_orders_table(layout)
 
         #Заполняем таблицу
-        self.filter_orders("Все заказы")
+        self.filter_orders()
 
         self.table.cellDoubleClicked.connect(self.on_order_double_clicked)
+
+    def load_orders_from_api(self):
+            try:
+                response = get_emp_orders(employee_id=session_employee_id)
+
+                if isinstance(response, dict) and 'orders' in response:
+                    self.orders_data = response['orders']
+                else:
+                    self.orders_data = response if isinstance(response, list) else []
+
+            except Exception as e:
+                QMessageBox.critical(self, "Ошибка", f"Не удалось загрузить заказы:\n{str(e)}")
 
     def create_status_bar(self, layout):
         status_layout = QHBoxLayout()
         status_layout.setSpacing(15)
 
         self.status_buttons = {}
-        statuses = ["Все заказы", "Открытые", "В работе", "Готовые", "Завершённые", "Отменённые"]
 
         self.status_mapping = {
             "Все заказы": None,
-            "Открытые": 1,
+            "Оформлены": 1,
             "В работе": 2,
-            "Готовые": 3,
-            "Завершённые": 4,
-            "Отменённые": 5
+            "Готовые к выдаче": 3,
+            "Завершенные": 4,
+            "Отмененные": 5
         }
 
-        for status in statuses:
+        for status, i in self.status_mapping.items():
             btn = QPushButton(status)
             btn.setCursor(Qt.PointingHandCursor)
             btn.setFlat(True)
@@ -506,7 +512,7 @@ class OrdersScreen(QWidget):
 
     def on_status_filter_clicked(self, status):
         self.current_filter = status
-        self.filter_orders(status)
+        self.filter_orders(status=status, orders_data=self.orders_data)
 
         for btn_status, btn in self.status_buttons.items():
             if btn_status == status:
@@ -530,55 +536,47 @@ class OrdersScreen(QWidget):
                     }
                 """)
 
-    def filter_orders(self, status = None):
+    def filter_orders(self, status = "Все заказы", orders_data = None):
         filter_status = self.status_mapping.get(status)
-        orders_all = get_emp_orders(employee_id=session_employee_id)
+        if orders_data is None:
+            self.load_orders_from_api()
+            orders_data = self.orders_data
 
         if filter_status is None:
-            filtered_orders = orders_all.values()
+            filtered_orders = orders_data
         else:
             filtered_orders = [
-                order for orders in orders_all.values()
-                for order in orders
-                if order['status_name'] == filter_status
+                order for order in orders_data
+                if order['status_id'] == filter_status
             ]
-        self.update_table(list(filtered_orders))
+        self.update_table(filtered_orders)
 
     def update_table(self, orders_all):
-        self.table.setRowCount(0)
-
         display_data = []
-        for orders in orders_all:
-            for order in orders:
-                display_data.append([
-                    order['id'],
-                    order['user_id'],
-                    order['total_ammount'],
-                    order['phone'],
-                    order['created_at'],
-                    order['order_datetime'],
-                    order['status_name']
-                ])
+        for order in orders_all:
+            display_data.append([
+                order['id'],
+                order['user_id'],
+                order['total_ammount'],
+                order['phone'],
+                order['created_at'],
+                order['order_datetime'],
+                order['status_name'],
+            ])
 
         display_data.sort(key=lambda x: x[0], reverse=True)
 
         self.table.setRowCount(len(display_data))
-
         for row, order_data in enumerate(display_data):
-            num_item = QTableWidgetItem()
-            num_item.setText(str(order_data[0]))
-            num_item.setTextAlignment(Qt.AlignCenter)
-            self.table.setItem(row, 0, num_item)
-
-            for col, value in enumerate(order_data[1:]):
+            for col, value in enumerate(order_data):
                 item = QTableWidgetItem(str(value))
 
-                if col == 5:
+                if col == 6:
                     item.setTextAlignment(Qt.AlignCenter)
                     self.color_status_item(item, value)
                     
                 item.setTextAlignment(Qt.AlignCenter)
-                self.table.setItem(row, col + 1, item)
+                self.table.setItem(row, col, item)
 
     def color_status_item(self, item, status):
         colors = {
@@ -694,19 +692,16 @@ class OrdersScreen(QWidget):
         layout.addWidget(self.table)
 
     def on_order_double_clicked(self, row, column):
-        order_data = get_order(order_to_list(self.all_orders_data), int(self.table.item(row, 0).text())) 
+        order_data = get_order(self.orders_data, int(self.table.item(row, 0).text())) 
         dialog = OrderDetailDialog(order_data, self)
         if dialog.exec() == QDialog.Accepted:
-            new_status = dialog.get_updated_status()
-            put_order_update(new_status)
-            QMessageBox.information(self, "Успешно", f"Статус заказа '{dialog.id}' обновлён!")
-            self.filter_orders()
-
-
-    def update_order_status(self, order_number, new_status):
-        if order_number in self.all_orders_data:
-            self.all_orders_data[order_number]['status_name'] = new_status
-            self.filter_orders(self.current_filter)
+            try:
+                new_status = dialog.get_updated_status()
+                put_order_update(new_status)
+                self.filter_orders(self.current_filter)
+                QMessageBox.information(self, "Успешно", f"Статус заказа '{dialog.id}' обновлён!")
+            except Exception as e:
+                QMessageBox.critical(self, "Ошибка", f"Статус заказа '{order_data['id']}' не обновлён:\n{str(e)}")
 
     def search_orders(self):
         search_text = self.search_input.text().lower()
@@ -716,19 +711,19 @@ class OrdersScreen(QWidget):
 
         filter_status = self.status_mapping.get(self.current_filter)
         if filter_status is None:
-            current_orders = list(self.all_orders_data.values())
+            current_orders = self.orders_data
         else:
             current_orders = [
-                order for order in self.all_orders_data.values()
-                if order['status_name'] == filter_status
+                order for order in self.orders_data
+                if order['status_id'] == filter_status
             ]
 
         #Поиск по тексту
         filtered_orders = []
         for order in current_orders:
-            if (search_text in order['order_number'].lower() or  #Поиск по номеру
-                    search_text in order['username'].lower() or  #Поиск по имени
-                    search_text in order['phone'].lower()):  #Поиск по телефону
+            if (search_text in str(order['id']).lower() or  #Поиск по номеру
+                    search_text in str(order['user_id']).lower() or  #Поиск по имени
+                    search_text in str(order['phone']).lower()):  #Поиск по телефону
                 filtered_orders.append(order)
 
         if filtered_orders:
@@ -746,12 +741,12 @@ class AddProductDialog(QDialog):
         self.data = product_data
 
         self.catalogPage = parent
-        self.products_data = self.catalogPage.all_catalog_data
+        self.products_data = self.catalogPage.products_data
         self.categories_data = self.catalogPage.categories_data
 
-        self.selected_image_path = None
+        self.id = None
 
-        self.id = max([i[0] for i in self.products_data]) + 1
+        self.selected_image_path = None
 
         if self.tag is None:
             self.tag = 'C'
@@ -763,7 +758,8 @@ class AddProductDialog(QDialog):
             self.setModal(True)
 
         elif self.tag == "R":
-            self.setWindowTitle(f"Просмотр изделия: {self.data[1]}")
+            self.id = self.data['id']
+            self.setWindowTitle(f"Просмотр изделия: {self.data['name']}")
             self.setMinimumSize(800, 600)
             self.setModal(True)
 
@@ -798,7 +794,7 @@ class AddProductDialog(QDialog):
         layout.setSpacing(15)
 
         #Заголовок
-        title = QLabel(f"Добавление изделия | ID: {self.id}")
+        title = QLabel(f"Добавление изделия")
         title.setAlignment(Qt.AlignCenter)
         title.setStyleSheet("font-size: 16px; font-weight: bold; color: #0078d7; margin-bottom: 10px;")
         layout.addWidget(title)
@@ -826,8 +822,7 @@ class AddProductDialog(QDialog):
         self.category_combo = QComboBox()
         
         for c in self.categories_data:
-            self.category_combo.addItem(c[0], c[-1])
-        #self.category_combo.addItems([c[0] for c in self.categories_data if c[3]])
+            self.category_combo.addItem(c['category_name'], c['id'])
         self.category_combo.setEditable(True)
         form_layout.addWidget(self.category_combo, 1, 1)
 
@@ -963,29 +958,28 @@ class AddProductDialog(QDialog):
             }
         """)
 
-        if self.tag == "R":
-            #Отображение
-            self.show_on_display = QCheckBox("Отображать изделие")
-            self.show_on_display.setChecked(True)
-            layout.addWidget(self.show_on_display)
+        #Отображение
+        self.show_on_display = QCheckBox("Отображать изделие")
+        self.show_on_display.setChecked(True)
+        layout.addWidget(self.show_on_display)
 
-            self.id = self.data[0]
-            title.setText(f"Просмотр изделия: {self.data[1]} | ID: {self.id}")
+        if self.tag == "R":
+            title.setText(f"Просмотр изделия: {self.data['name']} | ID: {self.id}")
             ok_button.setText("Сохранить")
-            self.name_input.setText(self.data[1])
-            i = self.category_combo.findData(self.data[2])
+            self.name_input.setText(self.data['name'])
+            i = self.category_combo.findData(self.data['category_id'])
             self.category_combo.setCurrentIndex(i)
-            self.selling_price.setValue(self.data[4])
-            self.cost_price.setValue(self.data[3])
-            self.ingredients_input.setText(self.data[5])
-            self.desc_input.setText(self.data[6])
-            self.calories_spin.setValue(self.data[7])
-            self.proteins_spin.setValue(self.data[8])
-            self.fats_spin.setValue(self.data[9])
-            self.carbs_spin.setValue(self.data[10])
-            self.weight_spin.setValue(self.data[11])
-            self.show_on_display.setChecked(self.data[12])
-            self.selected_image_path = self.data[13]
+            self.selling_price.setValue(self.data['sale_price'])
+            self.cost_price.setValue(self.data['cost_price'])
+            self.ingredients_input.setText(self.data['composition'])
+            self.desc_input.setText(self.data['description'])
+            self.calories_spin.setValue(self.data['calories'])
+            self.proteins_spin.setValue(self.data['protein'])
+            self.fats_spin.setValue(self.data['fat'])
+            self.carbs_spin.setValue(self.data['carbs'])
+            self.weight_spin.setValue(self.data['weight'])
+            self.show_on_display.setChecked(self.data['is_visible'])
+            self.selected_image_path = None
 
         layout.addWidget(button_box)
 
@@ -1043,7 +1037,6 @@ class AddProductDialog(QDialog):
 
     def get_product_data(self):
         data = {
-            "product_id": self.id,
             "name": self.name_input.text().strip(),
             "category_id": self.category_combo.currentData(),
             "sale_price": self.selling_price.value(),
@@ -1055,10 +1048,10 @@ class AddProductDialog(QDialog):
             "fat": self.fats_spin.value(),
             "carbs": self.carbs_spin.value(),
             "weight": self.weight_spin.value(),
-            "is_visible": True,
-            "image_url": self.selected_image_path
+            "is_visible": self.show_on_display.isChecked(),
+            'product_id': self.id,
+            "image_url": self.selected_image_path,
         }
-
         return data
 
 
@@ -1075,7 +1068,7 @@ class AddCategoryDialog(QDialog):
         self.catalogPage = parent
         self.categories_data = self.catalogPage.categories_data
 
-        self.id = max([i[-1] for i in self.categories_data]) + 1
+        self.id = None
 
         if self.tag == "C":
             self.setWindowTitle("Добавить категорию")
@@ -1083,7 +1076,8 @@ class AddCategoryDialog(QDialog):
             self.setModal(True)
 
         elif self.tag == "R":
-            self.setWindowTitle(f"Просмотр категории: {self.data[0]}")
+            self.id = self.data['id']
+            self.setWindowTitle(f"Просмотр категории: {self.id}")
             self.setMinimumSize(500, 350)
             self.setModal(True)
 
@@ -1136,9 +1130,8 @@ class AddCategoryDialog(QDialog):
 
         #Порядок категории
         form_layout.addWidget(QLabel("Порядок категории:"), 1, 0)
-        #
         self.order_spin = QSpinBox()
-        self.order_spin.setValue(max([i[-1] for i in self.categories_data]) + 1)
+        self.order_spin.setValue(max([i['showing_number'] for i in self.categories_data]) + 1)
         self.order_spin.setRange(1, 100)
         self.order_spin.setSuffix("")
         form_layout.addWidget(self.order_spin, 1, 1)
@@ -1190,14 +1183,11 @@ class AddCategoryDialog(QDialog):
         layout.addWidget(self.show_on_display) 
 
         if self.tag == "R":
-            self.id = self.data[-1]
-            self.name_input.setText(self.data[0])
-            self.order_spin.setValue(self.data[1])
-            title.setText(f"Категория: {self.data[0]}")
+            self.name_input.setText(self.data['category_name'])
+            self.order_spin.setValue(self.data['showing_number'])
+            title.setText(f"Категория: {self.data['category_name']}")
             ok_button.setText("Cохранить")
-            self.show_on_display.setChecked(self.data[3])
-
-            
+            self.show_on_display.setChecked(self.data['display_on_site'])
 
         layout.addWidget(button_box)
 
@@ -1212,25 +1202,24 @@ class AddCategoryDialog(QDialog):
         
         for cat in self.categories_data:
             if self.tag == "C":
-                if cat[0] == self.name_input.text().strip():
+                if cat['category_name'] == self.name_input.text().strip():
                     QMessageBox.warning(self, "Ошибка", "Категория с таким названием существует")
                     self.name_input.setFocus()
                     return
-                if cat[1] == self.order_spin.value():
+                if cat['showing_number'] == self.order_spin.value():
                     QMessageBox.warning(self, "Ошибка", "Категория такого порядка существует")
                     self.order_spin.setFocus()
                     return
                 
             elif self.tag == "R":
-                if cat[0] != new_name and cat[0] == self.name_input.text().strip():
+                if cat['category_name'] != new_name and cat['category_name'] == self.name_input.text().strip():
                     QMessageBox.warning(self, "Ошибка", "Категория с таким названием существует")
                     self.name_input.setFocus()
                     return
-                if cat[1] != new_order and cat[1] == self.order_spin.value():
+                if cat['showing_number'] != new_order and cat['showing_number'] == self.order_spin.value():
                     QMessageBox.warning(self, "Ошибка", "Категория такого порядка существует")
                     self.order_spin.setFocus()
                     return
-
 
         self.accept()
 
@@ -1247,10 +1236,12 @@ class CatalogPage(QWidget):
     def __init__(self):
         super().__init__()
         #Данные для изделий
-        self.all_catalog_data = product_dict_to_list(get_products())
+        self.products_data = [] 
+        self.load_products_from_api()
 
         #Данные для категорий
-        self.categories_data = category_dict_to_list(get_categories())
+        self.categories_data = []
+        self.load_categories_from_api()
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
@@ -1272,6 +1263,29 @@ class CatalogPage(QWidget):
         self.catalog_stack.addWidget(self.categories_page)
 
         layout.addWidget(self.catalog_stack)
+
+    def load_products_from_api(self):
+        try:
+            response = get_products()
+
+            if isinstance(response, dict) and 'products' in response:
+                self.products_data = response['products']
+            else:
+                self.products_data = response if isinstance(response, list) else []
+
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Не удалось загрузить изделия:\n{str(e)}")
+
+    def load_categories_from_api(self):
+        try:
+            response = get_categories()
+            if isinstance(response, dict) and 'categories' in response:
+                self.categories_data = response['categories']
+            else:
+                self.categories_data = response if isinstance(response, list) else []
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Не удалось загрузить категории:\n{str(e)}")
 
     def create_status_bar(self, layout):
         status_layout = QHBoxLayout()
@@ -1469,38 +1483,51 @@ class CatalogPage(QWidget):
             }
         """)
 
-        self.populate_products_table()
+        self.populate_products_table(self.products_data)
         layout.addWidget(self.products_table)
-
         return page
 
     def on_product_double_clicked(self, row, col):
-        product_data = get_product(self.all_catalog_data, int(self.products_table.item(row, 0).text()))
+        product_data = get_product(self.products_data, int(self.products_table.item(row, 0).text()))
         dialog = AddProductDialog(self, tag='R', product_data=product_data)
         if dialog.exec() == QDialog.Accepted:
-            product_data = dialog.get_product_data()
-            put_product(product_data)
-            self.update_products_data()
-            QMessageBox.information(self, "Успешно", f"Изделие '{product_data['name']}' обновлено!")
-            self.populate_categories_table()
+            try:
+                product_data = dialog.get_product_data()
+                put_product(product_data)
+                self.populate_products_table()
+                QMessageBox.information(self, "Успешно", f"Изделие '{product_data['name']}' обновлено!")
+            except Exception as e:
+                QMessageBox.critical(self, "Ошибка", f"Изделие '{product_data['name']}' не обновлено:\n{str(e)}")
 
 
     def populate_products_table(self, data=None):
         if data is None:
-            data = self.all_catalog_data = product_dict_to_list(get_products())
+            self.load_products_from_api()
+            data = self.products_data
 
         self.products_table.setRowCount(len(data))
 
         for row, item_data in enumerate(data):
-            for col, value in enumerate(item_data[:5]):
-                item = QTableWidgetItem(str(value))
-                item.setTextAlignment(Qt.AlignCenter)
+            # Артикул 
+            id_item = QTableWidgetItem(str(item_data.get('id', '')))
+            id_item.setTextAlignment(Qt.AlignCenter)
+            self.products_table.setItem(row, 0, id_item)
 
-                if col == 2:
-                    item.setText(*[c[0] for c in self.categories_data if c[-1] == value])
+            # Наименование
+            self.products_table.setItem(row, 1, QTableWidgetItem(item_data.get('name', '')))
 
+            # Категория
+            self.products_table.setItem(row, 2, QTableWidgetItem(*[c['category_name'] for c in self.categories_data if c['id'] == item_data.get('category_id', '')])) 
+            
+            # Себестоимость
+            cost_item = QTableWidgetItem(str(item_data.get('cost_price', '')))
+            cost_item.setTextAlignment(Qt.AlignCenter)
+            self.products_table.setItem(row, 3, cost_item)
 
-                self.products_table.setItem(row, col, item)
+            # Цена
+            sale_item = QTableWidgetItem(str(item_data.get('sale_price', '')))
+            sale_item.setTextAlignment(Qt.AlignCenter)
+            self.products_table.setItem(row, 4, sale_item)
 
     def search_products(self):
         search_text = self.products_search.text().lower()
@@ -1509,10 +1536,10 @@ class CatalogPage(QWidget):
             return
 
         filtered_data = []
-        for item in self.all_catalog_data:
-            if (search_text in str(item[0]) or  #Поиск по артикулу
-                search_text in item[1].lower() or  #Поиск по названию
-                search_text in [c[0] for c in self.categories_data if c[-1]==item[2]][0].lower()):   #Поиск по категории
+        for item in self.products_data:
+            if (search_text in str(item['id']) or  #Поиск по артикулу
+                search_text in item['name'].lower() or  #Поиск по названию
+                search_text in [c['category_name'] for c in self.categories_data if c['id'] == item['category_id']][0].lower()):  #Поиск по категории
                 filtered_data.append(item)
 
         if filtered_data:
@@ -1528,11 +1555,13 @@ class CatalogPage(QWidget):
     def show_add_product_dialog(self):
         dialog = AddProductDialog(self)
         if dialog.exec() == QDialog.Accepted:
-            product_data = dialog.get_product_data()
-            post_product(product_data)
-            self.update_categories_data()
-            QMessageBox.information(self, "Успешно", f"Изделие '{product_data['name']}' добавлено!")
-            self.populate_products_table()
+            try:
+                product_data = dialog.get_product_data()
+                post_product(product_data)
+                self.populate_products_table()
+                QMessageBox.information(self, "Успешно", f"Изделие '{product_data['name']}' добавлено!")
+            except Exception as e:
+                QMessageBox.critical(self, "Ошибка", f"Изделие '{product_data['name']}' не добавлено:\n{str(e)}")
 
     #СТРАНИЦА КАТЕГОРИЙ
     def create_categories_page(self):
@@ -1660,38 +1689,44 @@ class CatalogPage(QWidget):
             }
         """)
 
-        self.populate_categories_table()
-
+        self.populate_categories_table(self.categories_data)
         layout.addWidget(self.categories_table)
-
         return page
 
     def on_category_double_clicked(self, row, column):
         category_data = get_category(self.categories_data, int(self.categories_table.item(row, 2).text()))
-        print(category_data)
         dialog = AddCategoryDialog(self, tag='R', category_data=category_data)
         if dialog.exec() == QDialog.Accepted:
-            category_data = dialog.get_category_data()
-            put_category(category_data)
-            self.update_categories_data()
-            QMessageBox.information(self, "Успешно", f"Категория '{category_data['category_name']}' обновлена!")
-            self.populate_categories_table()
+            try:
+                category_data = dialog.get_category_data()
+                put_category(category_data)
+                self.populate_categories_table()
+                QMessageBox.information(self, "Успешно", f"Категория '{category_data['category_name']}' обновлена!")
+            except Exception as e:
+                QMessageBox.critical(self, "Ошибка", f"Категория '{category_data['category_name']}' не обновлена:\n{str(e)}")
 
     def populate_categories_table(self, data=None):
         if data is None:
-            data = self.categories_data = category_dict_to_list(get_categories())
+            self.load_categories_from_api()
+            data = self.categories_data
 
         self.categories_table.setRowCount(len(data))
 
         for row, cat_data in enumerate(data):
-            for col, value in enumerate(cat_data):
-                if col == 2:
-                    item = QTableWidgetItem(str(cat_data[-1]))
-                else:
-                    item = QTableWidgetItem(str(value))
+            # Наименование
+            name_item = QTableWidgetItem(str(cat_data.get('category_name', '')))
+            name_item.setTextAlignment(Qt.AlignCenter)
+            self.categories_table.setItem(row, 0, name_item)
 
-                item.setTextAlignment(Qt.AlignCenter)
-                self.categories_table.setItem(row, col, item)
+            # Порядок
+            showing_item = QTableWidgetItem(str(cat_data.get('showing_number', '')))
+            showing_item.setTextAlignment(Qt.AlignCenter)
+            self.categories_table.setItem(row, 1, showing_item)
+
+            # ID
+            id_item = QTableWidgetItem(str(cat_data.get('id', '')))
+            id_item.setTextAlignment(Qt.AlignCenter)
+            self.categories_table.setItem(row, 2, id_item)
 
     def search_categories(self):
         search_text = self.categories_search.text().lower()
@@ -1701,7 +1736,7 @@ class CatalogPage(QWidget):
 
         filtered_data = []
         for cat in self.categories_data:
-            if search_text in cat[0].lower():
+            if search_text in cat['category_name'].lower():
                 filtered_data.append(cat)
 
         if filtered_data:
@@ -1717,28 +1752,21 @@ class CatalogPage(QWidget):
     def show_add_category_dialog(self):
         dialog = AddCategoryDialog(self, tag="C")
         if dialog.exec() == QDialog.Accepted:
-            category_data = dialog.get_category_data()
-            post_category(category_data)
-            self.update_categories_data()
-            QMessageBox.information(self, "Успешно", f"Категория '{category_data['category_name']}' добавлена!")
-            #self.add_category(category_data)
-
-    def update_products_data(self):
-        self.all_catalog_data = product_dict_to_list(get_products())
-        self.populate_products_table()
-
-    def update_categories_data(self):
-        self.categories_data = category_dict_to_list(get_categories())
-        self.populate_categories_table()
+            try:
+                category_data = dialog.get_category_data()
+                post_category(category_data)
+                self.populate_categories_table()
+                QMessageBox.information(self, "Успешно", f"Категория '{category_data['category_name']}' добавлена!")
+            except Exception as e:
+                QMessageBox.critical(self, "Ошибка", f"Категория '{category_data['category_name']}' не добавлена:\n{str(e)}")
         
 
 class AddEmployeeDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        self.all_branches_data = branches_to_list(get_branches())
-        self.all_employees_data = emp_to_list(get_employees())
-        #self.employee_id = max([i[0] for i in self.all_employees_data]) + 1
+        self.branches_data = get_branches()
+        self.employees_data = get_employees()
 
         self.setWindowTitle("Добавить сотрудника")
         self.setMinimumSize(500, 500)
@@ -1815,6 +1843,7 @@ class AddEmployeeDialog(QDialog):
         form_layout.addWidget(QLabel("Телефон:"), 5, 0)
         self.phone_input = QLineEdit()
         self.phone_input.setPlaceholderText("+7(999)123-45-67")
+        self.phone_input.setInputMask("+7(999)999-99-99")
         form_layout.addWidget(self.phone_input, 5, 1)
 
         #Должность
@@ -1832,8 +1861,8 @@ class AddEmployeeDialog(QDialog):
         #Филиал
         form_layout.addWidget(QLabel("Филиал:"), 8, 0)
         self.branch_combo = QComboBox()
-        for br in self.all_branches_data:
-            self.branch_combo.addItem(br[0], br[-1])
+        for br in self.branches_data:
+            self.branch_combo.addItem(br['branches_name'], br['id'])
         self.on_item_changed()
         self.branch_combo.currentIndexChanged.connect(self.on_item_changed)
         form_layout.addWidget(self.branch_combo, 8, 1)
@@ -1883,9 +1912,9 @@ class AddEmployeeDialog(QDialog):
 
     def on_item_changed(self):
         name = self.branch_combo.currentData()
-        for branch in self.all_branches_data:
-            if branch[-1] == name:
-                name = branch[1]
+        for branch in self.branches_data:
+            if branch['id'] == name:
+                name = branch['branches_address']
                 break
         self.work_address.setText(name)
 
@@ -1902,6 +1931,11 @@ class AddEmployeeDialog(QDialog):
 
         if not self.phone_input.text().strip():
             QMessageBox.warning(self, "Ошибка", "Введите телефон сотрудника")
+            self.phone_input.setFocus()
+            return
+        
+        if not bool(re.match(r"^\+\d{1,3}\(\d{3}\)\d{3}\-\d{2}\-\d{2}$" ,self.phone_input.text().strip())):
+            QMessageBox.warning(self, "Ошибка", "Введите телефон сотрудника корректно")
             self.phone_input.setFocus()
             return
 
@@ -1924,11 +1958,15 @@ class EmployeeDetailDialog(QDialog):
     def __init__(self, employee_data, parent=None):
         super().__init__(parent)
 
-        self.all_branches_data = branches_to_list(get_branches())
-
+        self.branches_data = get_branches()['branches']
 
         self.employee_data = employee_data
-        self.employee_id = employee_data[0] if employee_data else 0
+        self.employee_id = employee_data['id']
+
+        self.fullname = [None, None, None]
+        names = self.employee_data['full_name'].split()
+        self.fullname[:len(names)] = names
+
         self.setWindowTitle(f"Сотрудник: {self.employee_id}")
         self.setMinimumSize(500, 550)
         self.setModal(True)
@@ -2013,7 +2051,7 @@ class EmployeeDetailDialog(QDialog):
         layout.setSpacing(15)
 
         #Заголовок с ФИО сотрудника
-        title_label = QLabel(f"Сотрудник: {self.employee_data[1]} {self.employee_data[2]} {self.employee_data[3]}")
+        title_label = QLabel(f"Сотрудник: {self.employee_data['full_name']}")
         title_label.setProperty("heading", True)
         title_label.setAlignment(Qt.AlignCenter)
         title_label.setStyleSheet("font-size: 18px; color: #0078d7; margin-bottom: 10px;")
@@ -2027,41 +2065,42 @@ class EmployeeDetailDialog(QDialog):
 
         #ID сотрудника
         info_layout.addWidget(QLabel("ID:"), 0, 0)
-        id_label = QLabel(f"<b>{self.employee_data[0]}</b>")
+        id_label = QLabel(f"<b>{self.employee_data['id']}</b>")
         info_layout.addWidget(id_label, 0, 1)
 
         #Фамилия
         info_layout.addWidget(QLabel("Фамилия:"), 1, 0)
-        self.lastname_input = QLineEdit(self.employee_data[1])
+        self.lastname_input = QLineEdit(self.fullname[0])
         info_layout.addWidget(self.lastname_input, 1, 1)
 
         #Имя
         info_layout.addWidget(QLabel("Имя:"), 2, 0)
-        self.firstname_input = QLineEdit(self.employee_data[2])
+        self.firstname_input = QLineEdit(self.fullname[1])
         info_layout.addWidget(self.firstname_input, 2, 1)
 
         #Отчество
         info_layout.addWidget(QLabel("Отчество:"), 3, 0)
-        self.patronymic_input = QLineEdit(self.employee_data[3])
+        self.patronymic_input = QLineEdit(self.fullname[2])
         info_layout.addWidget(self.patronymic_input, 3, 1)
 
         #Логин
         info_layout.addWidget(QLabel("Логин:"), 4, 0)
-        self.login_input = QLineEdit(self.employee_data[6] if len(self.employee_data) > 6 else "")
+        self.login_input = QLineEdit(self.employee_data['username'])
         info_layout.addWidget(self.login_input, 4, 1)
 
         #Телефон
         info_layout.addWidget(QLabel("Телефон:"), 5, 0)
-        self.phone_input = QLineEdit(self.employee_data[4] if len(self.employee_data) > 4 else "")
+        self.phone_input = QLineEdit(self.employee_data['phone'])
+        self.phone_input.setInputMask("+7(000)000-00-00")
         info_layout.addWidget(self.phone_input, 5, 1)
 
         #Должность
         info_layout.addWidget(QLabel("Должность:"), 7, 0)
         self.position_combo = QComboBox()
-
         for i, p in enumerate(["Администратор", "Менеджер"]):
             self.position_combo.addItem(p, i+1)
-        self.position_combo.setCurrentIndex(self.employee_data[5]-1)
+        i = self.position_combo.findData(self.employee_data['position_id'])
+        self.position_combo.setCurrentIndex(i)
         info_layout.addWidget(self.position_combo, 7, 1)
 
         #Адрес филиала
@@ -2072,9 +2111,9 @@ class EmployeeDetailDialog(QDialog):
         #Филиал
         info_layout.addWidget(QLabel("Филиал:"), 8, 0)
         self.branch_combo = QComboBox()
-        for br in self.all_branches_data:
-            self.branch_combo.addItem(br[0], br[-1])
-        i = self.branch_combo.findData(self.employee_data[7])
+        for br in self.branches_data:
+            self.branch_combo.addItem(br['branches_name'], br['id'])
+        i = self.branch_combo.findData(self.employee_data['branch_id'])
         self.branch_combo.setCurrentIndex(i)
         self.on_item_changed()
         self.branch_combo.currentIndexChanged.connect(self.on_item_changed)
@@ -2106,9 +2145,9 @@ class EmployeeDetailDialog(QDialog):
 
     def on_item_changed(self):
         name = self.branch_combo.currentData()
-        for branch in self.all_branches_data:
-            if branch[-1] == name:
-                name = branch[1]
+        for branch in self.branches_data:
+            if branch['id'] == name:
+                name = branch['branches_address']
                 break
         self.work_address.setText(name)
 
@@ -2128,6 +2167,11 @@ class EmployeeDetailDialog(QDialog):
             QMessageBox.warning(self, "Ошибка", "Введите телефон сотрудника")
             self.phone_input.setFocus()
             return
+        
+        if not bool(re.match(r"^\+\d{1,3}\(\d{3}\)\d{3}\-\d{2}\-\d{2}$" ,self.phone_input.text().strip())):
+            QMessageBox.warning(self, "Ошибка", "Введите телефон сотрудника корректно")
+            self.phone_input.setFocus()
+            return
 
         self.accept()
 
@@ -2135,7 +2179,7 @@ class EmployeeDetailDialog(QDialog):
         reply = QMessageBox.question(
             self,
             "Подтверждение удаления",
-            f"Вы действительно хотите удалить сотрудника {self.employee_data[1]} {self.employee_data[2]}?\n\nЭто действие нельзя отменить.",
+            f"Вы действительно хотите удалить сотрудника {self.fullname[0]} {self.fullname[1]}?\n\nЭто действие нельзя отменить.",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
         )
@@ -2159,9 +2203,9 @@ class EmployeeDetailDialog(QDialog):
 class EmployeesPage(QWidget):
     def __init__(self):
         super().__init__()
-        self.all_employees_data = emp_to_list(get_employees())
+        self.employees_data = get_employees()
 
-        self.next_id = len(self.all_employees_data) + 1
+        #self.next_id = len(self.all_employees_data) + 1
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
@@ -2260,6 +2304,7 @@ class EmployeesPage(QWidget):
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.table.cellDoubleClicked.connect(self.on_employee_double_clicked)
+
         self.populate_employees()
 
         self.table.setStyleSheet("""
@@ -2287,34 +2332,65 @@ class EmployeesPage(QWidget):
 
         layout.addWidget(self.table)
 
+    def load_employees_from_api(self):
+        try:
+            response = get_employees()
+
+            if isinstance(response, dict) and 'employees' in response:
+                self.employees_data = response['employees']
+            else:
+                self.employees_data = response if isinstance(response, list) else []
+
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Не удалось загрузить сотрудников:\n{str(e)}")
+
     def populate_employees(self, data=None):
         if data is None:
-            data = emp_to_list(get_employees())
+            self.load_employees_from_api()
+            data = self.employees_data
 
         self.table.setRowCount(len(data))
 
-        for row, emp_data in enumerate(data):
-            for col, value in enumerate(emp_data):
-                if col == 5:
-                    item = QTableWidgetItem(str(roles[value]))
-                else:
-                    item = QTableWidgetItem(str(value))
 
-                item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                self.table.setItem(row, col, item)
+        for row, emp_data in enumerate(data):
+            fullname = [None, None, None]
+            names = emp_data['full_name'].split()
+            fullname[:len(names)] = names
+
+            # ID
+            id_item = QTableWidgetItem(str(emp_data.get('id', '')))
+            id_item.setTextAlignment(Qt.AlignCenter)
+            self.table.setItem(row, 0, id_item)
+
+            # Фамилия
+            self.table.setItem(row, 1, QTableWidgetItem(str(fullname[0])))
+            
+            # Имя
+            self.table.setItem(row, 2, QTableWidgetItem(str(fullname[1])))
+
+            # Отчество
+            self.table.setItem(row, 3, QTableWidgetItem(str(fullname[2])))
+
+            # Телефон
+            self.table.setItem(row, 4, QTableWidgetItem(str(emp_data.get('phone', ''))))
+
+            # Должность
+            self.table.setItem(row, 5, QTableWidgetItem(str(emp_data.get('position_name', ''))))
+            
 
     def search_employees(self):
         search_text = self.search_input.text().lower()
         if not search_text:
-            self.filter_employees_by_status(self.status_filter.currentText())
+            self.populate_employees()
             return
 
         filtered_data = []
-        for emp in self.all_employees_data:
-            full_name = f"{emp[1]} {emp[2]} {emp[3]}".lower()
-            if (search_text in full_name or  # Поиск по ФИО
-                    search_text in emp[4].lower() or  # Поиск по телефону
-                    search_text in emp[6].lower()):  # Поиск по должности
+        for emp in self.employees_data:
+            full_name = emp['full_name'].lower()
+            if (search_text in emp['id'] or # Поиск по ID
+                    search_text in full_name or  # Поиск по ФИО
+                    search_text in emp['phone'].lower() or  # Поиск по телефону
+                    search_text in emp['position_name'].lower()):  # Поиск по должности
                 filtered_data.append(emp)
 
         if filtered_data:
@@ -2329,8 +2405,11 @@ class EmployeesPage(QWidget):
     def show_add_employee_dialog(self):
         dialog = AddEmployeeDialog(self)
         if dialog.exec() == QDialog.Accepted:
-            employee_data = dialog.get_employee_data()
-            self.add_employee(employee_data)
+            try: 
+                employee_data = dialog.get_employee_data()
+                self.add_employee(employee_data)
+            except Exception as e:
+                QMessageBox.critical(self, "Ошибка", f"Сотрудник '{employee_data['full_name']}' не добавлен:\n{str(e)}")
 
     def add_employee(self, data):
         post_employee(data=data)
@@ -2339,14 +2418,17 @@ class EmployeesPage(QWidget):
 
     def on_employee_double_clicked(self, row, column):
         employee_id = int(self.table.item(row, 0).text())
-        employee_data = emp_to_list(get_employee(employee_id=employee_id))
+        employee_data = get_employee(employee_id=employee_id)['employee']
         dialog = EmployeeDetailDialog(employee_data, self)
 
         dialog.employee_deleted.connect(self.delete_employee)
 
         if dialog.exec() == QDialog.Accepted:
-            updated_data = dialog.get_updated_data()
-            self.update_employee_data(employee_id, updated_data)
+            try:
+                updated_data = dialog.get_updated_data()
+                self.update_employee_data(employee_id, updated_data)
+            except Exception as e:
+                QMessageBox.critical(self, "Ошибка", f"Сотрудник '{employee_data['full_name']}' не обновлён:\n{str(e)}")
 
     def delete_employee(self, employee_id):
         del_employee(employee_id=employee_id)
@@ -2441,6 +2523,7 @@ class AddBakeryDialog(QDialog):
         form_layout.addWidget(QLabel("Телефон:"), 2, 0)
         self.phone_input = QLineEdit()
         self.phone_input.setPlaceholderText("+7(999)123-45-67")
+        self.phone_input.setInputMask("+7(999)999-99-99")
         form_layout.addWidget(self.phone_input, 2, 1)
 
         #Статус
@@ -2612,12 +2695,13 @@ class BakeryDetailDialog(QDialog):
         form_layout.addWidget(QLabel("Телефон:*"), 2, 0)
         self.phone_input = QLineEdit(self.branch_phone)
         self.phone_input.setPlaceholderText("+7(999)123-45-67")
+        self.phone_input.setInputMask("+7(999)999-99-99")
         form_layout.addWidget(self.phone_input, 2, 1)
 
         # Статус
         form_layout.addWidget(QLabel("Открыт:"), 3, 0)
         self.status_combo = QCheckBox()
-        self.status_combo.setChecked(True)
+        self.status_combo.setChecked(self.branch_status)
         form_layout.addWidget(self.status_combo, 3, 1)
 
         layout.addWidget(form_widget)
@@ -2686,7 +2770,8 @@ class BakeryDetailDialog(QDialog):
             'branches_name': self.branch_name,
             'branches_address': self.address_input.text().strip(),
             'branches_phone': self.phone_input.text().strip(),
-            'is_active_for_order': self.status_combo.isChecked()
+            'is_active_for_order': self.status_combo.isChecked(),
+            'id': self.branch_id
         }
 
 
@@ -2752,24 +2837,6 @@ class BakeriesPage(QWidget):
         """)
         add_btn.clicked.connect(self.show_add_bakery_dialog)
 
-        refresh_btn = QPushButton("⟳")
-        refresh_btn.setFixedSize(35, 35)
-        refresh_btn.setCursor(Qt.PointingHandCursor)
-        refresh_btn.setToolTip("Обновить данные")
-        refresh_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #0078d7;
-                color: white;
-                border: none;
-                border-radius: 4px;
-                font-size: 16px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #005a9e;
-            }
-        """)
-        refresh_btn.clicked.connect(self.load_branches_from_api)
 
         clear_btn = QPushButton("✕")
         clear_btn.setFixedSize(30, 30)
@@ -2793,7 +2860,6 @@ class BakeriesPage(QWidget):
         search_layout.addWidget(search_btn)
         search_layout.addWidget(clear_btn)
         search_layout.addStretch()
-        search_layout.addWidget(refresh_btn)
         search_layout.addWidget(add_btn)
 
         layout.addLayout(search_layout)
@@ -2838,36 +2904,23 @@ class BakeriesPage(QWidget):
         layout.addWidget(self.table)
 
         # Загружаем данные
-        self.load_branches_from_api()
+        self.populate_bakeries()
 
     def load_branches_from_api(self):
         try:
             response = get_branches()
 
-            # API возвращает {"branches": [...]}
             if isinstance(response, dict) and 'branches' in response:
-                branches = response['branches']
+                self.bakeries_data = response['branches']
             else:
-                branches = response if isinstance(response, list) else []
-
-            # Преобразуем в формат для таблицы
-            self.bakeries_data = []
-            for branch in branches:
-                self.bakeries_data.append({
-                    'id': branch.get('id', 0),
-                    'branches_name': branch.get('branches_name', ''),
-                    'branches_address': branch.get('branches_address', ''),
-                    'branches_phone': branch.get('branches_phone', ''),
-                    'is_active_for_order': branch.get('is_active_for_order', True)
-                })
-
-            self.populate_bakeries()
+                self.bakeries_data = response if isinstance(response, list) else []
 
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", f"Не удалось загрузить филиалы:\n{str(e)}")
 
     def populate_bakeries(self, data=None):
         if data is None:
+            self.load_branches_from_api()
             data = self.bakeries_data
 
         self.table.setRowCount(len(data))
@@ -2911,15 +2964,8 @@ class BakeriesPage(QWidget):
 
     def add_branch(self, data):
         try:
-            payload = {
-                'branches_name': data['branches_name'],
-                'branches_address': data['branches_address'],
-                'branches_phone': data['branches_phone'],
-                'is_active_for_order': data['is_active_for_order']
-            }
-
-            post_branch(payload)
-            self.load_branches_from_api()
+            post_branch(data)
+            self.populate_bakeries()
             QMessageBox.information(self, "Успешно", f"Филиал '{data['branches_name']}' добавлен!")
 
         except Exception as e:
@@ -2932,20 +2978,12 @@ class BakeriesPage(QWidget):
 
         if dialog.exec() == QDialog.Accepted:
             updated_data = dialog.get_updated_data()
-            self.update_branch(branch_data['id'], updated_data)
+            self.update_branch(updated_data)
 
-    def update_branch(self, branch_id, updated_data):
+    def update_branch(self, updated_data):
         try:
-            payload = {
-                'id': branch_id,
-                'branches_name': updated_data['branches_name'],
-                'branches_address': updated_data['branches_address'],
-                'branches_phone': updated_data['branches_phone'],
-                'is_active_for_order': updated_data['is_active_for_order']
-            }
-
-            put_branch(payload)
-            self.load_branches_from_api()
+            put_branch(updated_data)
+            self.populate_bakeries()
             QMessageBox.information(self, "Успешно", "Данные филиала обновлены!")
 
         except Exception as e:
@@ -3285,144 +3323,6 @@ class ApplicationController:
     def run(self):
         self.login_window.show()
         return self.app.exec()
-
-
-def product_dict_to_list(dict):
-    # ["001", "Синнабон классический", "Синнабоны", "120.00", "100.00", "синнабон, классический, корица", "100"],
-    data_list = []
-    # Если передан JSON-строкой, парсим её
-    data = dict
-
-    # Получаем список продуктов
-    try:
-        products = data.get("products", [])
-    except:
-        products = data
-    
-    # Создаём многоуровневый список
-    
-    for product in products:
-        # Создаём список для каждого продукта
-        product_data = [
-            product.get("id", 0),
-            product.get("name", ""),
-            product.get("category_id", ""),
-            product.get("cost_price", 0.0),
-            product.get("sale_price", 0.0),
-            product.get("composition", ""),
-            product.get("description", ""),
-            product.get("calories", 0),
-            product.get("protein", 0.0),
-            product.get("fat", 0.0),
-            product.get("carbs", 0.0),
-            product.get("weight", 0),
-            product.get("is_visible", True),
-            product.get("image_url", "")
-        ]
-        data_list.append(product_data)
-
-    return data_list
-
-
-def category_dict_to_list(dict):
-    data_list = []
-    data = dict
-
-    try:
-        cat = data.get("categories", [])
-    except:
-        cat = data
-    
-    # Создаём многоуровневый список
-    
-    for c in cat:
-        cat_data = [
-            c.get("category_name", ""),
-            c.get("showing_number", 0),
-            c.get("display_on_site", True),
-            c.get("id", 0)
-        ]
-        data_list.append(cat_data)
-
-    return data_list
-
-
-def order_to_list(orders_all):
-    redacted = [
-        order for orders in orders_all.values()
-        for order in orders
-    ]
-    return redacted
-
-
-def emp_to_list(dict):
-    data_list = []
-    data = dict
-
-    try:
-        employees = data.get("employees", [])
-        if employees == []:
-            employees = data.get("employee")
-            employees = employees
-    except:
-        employees = data
-    if isinstance(employees, list):
-        for employee in employees:
-            employees_data = [
-                employee.get("id", 0),
-                employee.get("full_name", ""),
-                employee.get("phone", ""),
-                employee.get("position_id", 0),
-                employee.get("username", ""),
-                employee.get("branch_id", 0),
-                employee.get("work_address", ""),
-            ]
-            listname = ["", "", ""]
-            name = employees_data[1].split()
-            listname[0:len(name)] = name
-            employees_data[1:2] = listname
-            data_list.append(employees_data)
-    else:
-        employees_data = [
-            employees.get("id", 0),
-            employees.get("full_name", ""),
-            employees.get("phone", ""),
-            employees.get("position_id", 0),
-            employees.get("username", ""),
-            employees.get("branch_id", 0),
-            employees.get("work_address", ""),
-        ]
-        listname = ["", "", ""]
-        name = employees_data[1].split()
-        listname[0:len(name)] = name
-        employees_data[1:2] = listname
-        return employees_data
-
-    return data_list
-
-
-def branches_to_list(dict):
-    data_list = []
-    data = dict
-
-    try:
-        branches = data.get("branches", [])
-    except:
-        branches = data
-    
-    # Создаём многоуровневый список
-    
-    for br in branches:
-        br_data = [
-            br.get("branches_name", ""),
-            br.get("branches_address", ""),
-            br.get("branches_phone", ""),
-            br.get("is_active_for_order", True),
-            br.get("id", 0)
-        ]
-        data_list.append(br_data)
-
-    return data_list
 
 
 def main():
