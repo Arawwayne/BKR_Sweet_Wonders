@@ -1,21 +1,15 @@
 import os
 import sys
 from dotenv import load_dotenv
-from pathlib import Path
 
+def get_base_path():
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(sys.executable)
+    else:
+        return os.path.dirname(os.path.abspath(__file__))
 
-def resource_path(relative_path):
-    """Получить путь к файлу, работает и в .py и в .exe"""
-    try:
-        # PyInstaller создает временную папку и хранит путь в _MEIPASS
-        base_path = sys._MEIPASS
-    except Exception:
-        base_path = os.path.abspath(".")
-    
-    return os.path.join(base_path, relative_path)
-
-# Загрузка .env файла
-env_path = resource_path('.env')
+base_dir = get_base_path()
+env_path = os.path.join(base_dir, '.env')
 load_dotenv(dotenv_path=env_path)
 
 SERVER_HOST = os.getenv("SERVER_HOST")
