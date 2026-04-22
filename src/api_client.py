@@ -76,7 +76,11 @@ class APIClient:
             if file_handle:
                 file_handle.close()
 
-        
+    
+    def delete(self, endpoint):
+        response = requests.delete(f"{self.base_url}/{endpoint}")
+        self._handle_errors(response)
+        return response.json()
     
     
     def _handle_errors(self, response):
