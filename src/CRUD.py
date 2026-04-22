@@ -11,7 +11,7 @@ def get_products():
     return client.get("/admin/products")
 
 def get_product(products, id):
-    return next((p for p in products if p[0] == id), None)
+    return next((p for p in products if p['id'] == id), None)
 
 def post_product(data):
     return client.post_data("/admin/products/add", data=data)
@@ -25,7 +25,7 @@ def get_categories():
     return client.get("/admin/categories")
 
 def get_category(categories, id):
-    return next((c for c in categories if c[-1] == id), None)
+    return next((c for c in categories if c['id'] == id), None)
 
 def post_category(data):
     return client.post_json("/admin/categories/add", data=data)
@@ -79,7 +79,7 @@ def put_branch(data):
 
 def save_response_to_json(response: requests.Response, filename: str = None):
     if filename is None:
-        filename = f"response1.json"
+        filename = f"response.json"
     
     try:
         # Получаем JSON данные из response
@@ -96,7 +96,7 @@ def save_response_to_json(response: requests.Response, filename: str = None):
         print("Response не содержит JSON данных")
         return None
 
-#save_response_to_json(get_employees())
+#save_response_to_json(get_branches())
 
 # data = {
 #     'full_name': 'admin',
