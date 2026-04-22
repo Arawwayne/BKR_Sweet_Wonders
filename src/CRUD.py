@@ -70,6 +70,12 @@ def del_employee(employee_id):
 def get_branches():
     return client.get(f"/admin/branches")
 
+def post_branch(data):
+    return client.post_json(f'/admin/branches/add', data=data)
+
+def put_branch(data):
+    return client.put_json(f'/admin/branches/update', data=data)
+
 
 def save_response_to_json(response: requests.Response, filename: str = None):
     if filename is None:
@@ -91,3 +97,14 @@ def save_response_to_json(response: requests.Response, filename: str = None):
         return None
 
 #save_response_to_json(get_employees())
+
+# data = {
+#     'full_name': 'admin',
+#     'phone': '+79999999999',
+#     'position_id': 1,
+#     'username': '111',
+#     'password': '111',
+#     'branch_id': 1
+# }
+
+# post_employee(data=data)

@@ -1,4 +1,5 @@
 import sys
+import re
 import csv
 import os
 from PySide6.QtWidgets import (
@@ -20,6 +21,11 @@ from CRUD import *
 
 session_employee_id = None
 session_access = None
+
+roles = {
+    1: 'Администратор',
+    2: 'Менеджер'
+}
 
 #СТРАНИЦА АВТОРИЗАЦИИ
 
@@ -181,8 +187,7 @@ class LoginScreen(QMainWindow):
             response = post_employee_auth(login_data)
             global session_employee_id, session_access
             session_employee_id = response["employee_id"]
-            session_access = get_employee(session_employee_id)["employee"]['position']
-            print(session_access)
+            session_access = get_employee(session_employee_id)["employee"]['position_id']
             self.login_successful.emit()
             self.close()
         except:
@@ -1057,7 +1062,6 @@ class AddProductDialog(QDialog):
         return data
 
 
-
 class AddCategoryDialog(QDialog):
     def __init__(self, parent=None, tag=None, category_data=None):
         super().__init__(parent)
@@ -1234,516 +1238,8 @@ class AddCategoryDialog(QDialog):
         return {
           'category_name': self.name_input.text().strip(), 
           'showing_number': self.order_spin.value(), 
-          'category_description': None, 
           'display_on_site': self.show_on_display.isChecked(),
           'id': self.id
-        }
-
-
-class ProductViewDialog(QDialog): # Не использутеся
-    def __init__(self, product_data, parent=None):
-        super().__init__(parent)
-        self.product_data = product_data
-        self.selected_image_path = None
-        self.setWindowTitle(f"Просмотр изделия: {product_data[1] if len(product_data) > 1 else ''}")
-        self.setMinimumSize(800, 600)
-        self.setModal(True)
-
-        self.setStyleSheet("""
-            QDialog {
-                background-color: white;
-            }
-            QLabel {
-                font-size: 12px;
-            }
-            QLabel[heading="true"] {
-                font-size: 16px;
-                font-weight: bold;
-                color: #333;
-                margin-top: 10px;
-            }
-            QGroupBox {
-                font-weight: bold;
-                font-size: 13px;
-                border: 1px solid #ddd;
-                border-radius: 5px;
-                margin-top: 10px;
-                padding-top: 10px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px 0 5px;
-            }
-            QCheckBox::indicator:checked {
-                border: 1px solid #0078d7;
-                background-color: #0078d7;
-                border-radius: 3px;
-            }
-            QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {
-                padding: 8px;
-                border: 1px solid #ddd;
-                border-radius: 4px;
-                font-size: 13px;
-            }
-            QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {
-                border-color: #0078d7;
-            }
-        """)
-
-        self.init_ui()
-
-    def init_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setSpacing(15)
-        layout.setContentsMargins(20, 20, 20, 20)
-
-        #Заголовок
-        product_name = self.product_data[1] if len(self.product_data) > 1 else ""
-        title_label = QLabel(f"Изделие: {product_name}")
-        title_label.setProperty("heading", True)
-        title_label.setAlignment(Qt.AlignCenter)
-        title_label.setStyleSheet("font-size: 18px; color: #0078d7; margin-bottom: 10px;")
-        layout.addWidget(title_label)
-
-        #Информация об изделии
-        info_group = QGroupBox("Информация об изделии")
-        info_layout = QGridLayout(info_group)
-        info_layout.setVerticalSpacing(12)
-        info_layout.setHorizontalSpacing(20)
-        info_layout.setContentsMargins(15, 20, 15, 15)
-
-        #Артикул
-        info_layout.addWidget(QLabel("Артикул:"), 0, 0)
-        article_value = self.product_data[0] if len(self.product_data) > 0 else ""
-        article_label = QLabel(f"<b>{article_value}</b>")
-        article_label.setStyleSheet("color: #0078d7; font-size: 13px;")
-        info_layout.addWidget(article_label, 0, 1)
-
-        #Наименование
-        info_layout.addWidget(QLabel("Наименование:"), 1, 0)
-        self.name_edit = QLineEdit(product_name)
-        self.name_edit.setPlaceholderText("Введите наименование изделия")
-        info_layout.addWidget(self.name_edit, 1, 1, 1, 3)
-
-        #Категория
-        info_layout.addWidget(QLabel("Категория:"), 2, 0)
-        self.category_combo = QComboBox()
-        self.category_combo.addItems(["Синнабоны", "Кремобоны", "Пирожные", "Торты", "Напитки"])
-        self.category_combo.setEditable(True)
-        if len(self.product_data) > 2:
-            current_category = self.product_data[2]
-            index = self.category_combo.findText(current_category)
-            if index >= 0:
-                self.category_combo.setCurrentIndex(index)
-            else:
-                self.category_combo.setCurrentText(current_category)
-        info_layout.addWidget(self.category_combo, 2, 1)
-
-        #Себестоимость
-        info_layout.addWidget(QLabel("Себестоимость:"), 3, 0)
-        self.cost_price = QDoubleSpinBox()
-        self.cost_price.setRange(0, 100000)
-        self.cost_price.setPrefix("₽ ")
-        self.cost_price.setDecimals(2)
-        self.cost_price.setSingleStep(10)
-        if len(self.product_data) > 3:
-            try:
-                self.cost_price.setValue(float(self.product_data[3]) if self.product_data[3] else 0)
-            except (ValueError, TypeError):
-                self.cost_price.setValue(0)
-        info_layout.addWidget(self.cost_price, 3, 1)
-
-        #Цена
-        info_layout.addWidget(QLabel("Цена:"), 3, 2)
-        self.selling_price = QDoubleSpinBox()
-        self.selling_price.setRange(0, 100000)
-        self.selling_price.setPrefix("₽ ")
-        self.selling_price.setDecimals(2)
-        self.selling_price.setSingleStep(10)
-        if len(self.product_data) > 4:
-            try:
-                self.selling_price.setValue(float(self.product_data[4]) if self.product_data[4] else 0)
-            except (ValueError, TypeError):
-                self.selling_price.setValue(0)
-        info_layout.addWidget(self.selling_price, 3, 3)
-
-        #Количество на складе
-        info_layout.addWidget(QLabel("Количество:"), 2, 2)
-        self.quantity_spin = QSpinBox()
-        self.quantity_spin.setRange(0, 10000)
-        self.quantity_spin.setSuffix(" шт")
-        if len(self.product_data) > 6:
-            try:
-                quantity = self.product_data[6]
-                quantity_value = int(quantity) if quantity else 0
-                self.quantity_spin.setValue(quantity_value)
-            except (ValueError, TypeError):
-                self.quantity_spin.setValue(0)
-        info_layout.addWidget(self.quantity_spin, 2, 3)
-
-        #Описание
-        info_layout.addWidget(QLabel("Описание:"), 4, 0)
-        self.desc_input = QLineEdit()
-        self.desc_input.setPlaceholderText("Введите описание изделия")
-        if len(self.product_data) > 7:
-            self.desc_input.setText(str(self.product_data[7]) if self.product_data[7] else "")
-        info_layout.addWidget(self.desc_input, 4, 1, 1, 3)
-
-        #Состав
-        info_layout.addWidget(QLabel("Состав:"), 5, 0)
-        self.ingredients_input = QLineEdit()
-        self.ingredients_input.setPlaceholderText("Введите состав изделия")
-        if len(self.product_data) > 8:
-            self.ingredients_input.setText(str(self.product_data[8]) if self.product_data[8] else "")
-        info_layout.addWidget(self.ingredients_input, 5, 1, 1, 3)
-
-        #Энергетическая ценность
-        info_layout.addWidget(QLabel("Энергетическая ценность:"), 6, 0)
-        self.calories_spin = QSpinBox()
-        self.calories_spin.setRange(0, 10000)
-        self.calories_spin.setSuffix(" ккал")
-        if len(self.product_data) > 9:
-            try:
-                self.calories_spin.setValue(int(self.product_data[9]) if self.product_data[9] else 0)
-            except (ValueError, TypeError):
-                self.calories_spin.setValue(0)
-        info_layout.addWidget(self.calories_spin, 6, 1)
-
-        #Жиры
-        info_layout.addWidget(QLabel("Жиры:"), 6, 2)
-        self.fats_spin = QDoubleSpinBox()
-        self.fats_spin.setRange(0, 1000)
-        self.fats_spin.setSuffix(" г")
-        self.fats_spin.setDecimals(1)
-        if len(self.product_data) > 10:
-            try:
-                self.fats_spin.setValue(float(self.product_data[10]) if self.product_data[10] else 0)
-            except (ValueError, TypeError):
-                self.fats_spin.setValue(0)
-        info_layout.addWidget(self.fats_spin, 6, 3)
-
-        # Белки
-        info_layout.addWidget(QLabel("Белки:"), 7, 0)
-        self.proteins_spin = QDoubleSpinBox()
-        self.proteins_spin.setRange(0, 1000)
-        self.proteins_spin.setSuffix(" г")
-        self.proteins_spin.setDecimals(1)
-        if len(self.product_data) > 11:
-            try:
-                self.proteins_spin.setValue(float(self.product_data[11]) if self.product_data[11] else 0)
-            except (ValueError, TypeError):
-                self.proteins_spin.setValue(0)
-        info_layout.addWidget(self.proteins_spin, 7, 1)
-
-        #Углеводы
-        info_layout.addWidget(QLabel("Углеводы:"), 7, 2)
-        self.carbs_spin = QDoubleSpinBox()
-        self.carbs_spin.setRange(0, 1000)
-        self.carbs_spin.setSuffix(" г")
-        self.carbs_spin.setDecimals(1)
-        if len(self.product_data) > 12:
-            try:
-                self.carbs_spin.setValue(float(self.product_data[12]) if self.product_data[12] else 0)
-            except (ValueError, TypeError):
-                self.carbs_spin.setValue(0)
-        info_layout.addWidget(self.carbs_spin, 7, 3)
-
-        #Отображение
-        self.show_on_display = QCheckBox("Отображать изделие")
-        self.show_on_display.setChecked(True)
-        if len(self.product_data) > 5:
-            try:
-                self.show_on_display.setChecked(bool(self.product_data[5]))
-            except (ValueError, TypeError):
-                pass
-        info_layout.addWidget(self.show_on_display, 8, 0, 1, 2)
-
-        #Изображение
-        self.pic_button = QPushButton("Загрузить изображение")
-        self.pic_button.setCursor(Qt.PointingHandCursor)
-        self.pic_button.setStyleSheet("""
-            QPushButton {
-                background-color: #28a745;
-                color: white;
-                border: none;
-                padding: 8px 20px;
-                border-radius: 4px;
-                font-weight: bold;
-                min-width: 150px;
-            }
-            QPushButton:hover {
-                background-color: #218838;
-            }
-        """)
-        self.pic_button.clicked.connect(self.load_image)
-        info_layout.addWidget(self.pic_button, 9, 0, 1, 2)
-
-        #Метка для отображения пути к файлу
-        self.image_path_label = QLabel("Файл не выбран")
-        self.image_path_label.setStyleSheet("color: #666; font-size: 11px; padding: 5px;")
-        info_layout.addWidget(self.image_path_label, 9, 2, 1, 2)
-
-        layout.addWidget(info_group)
-
-        #Кнопки
-        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        button_box.accepted.connect(self.accept)
-        button_box.rejected.connect(self.reject)
-
-        ok_button = button_box.button(QDialogButtonBox.Ok)
-        ok_button.setText("Сохранить")
-        ok_button.setMinimumWidth(120)
-        ok_button.setStyleSheet("""
-            QPushButton {
-                background-color: #0078d7;
-                color: white;
-                border: none;
-                padding: 8px 20px;
-                border-radius: 3px;
-                font-weight: bold;
-                min-width: 100px;
-            }
-            QPushButton:hover {
-                background-color: #005a9e;
-            }
-        """)
-
-        cancel_button = button_box.button(QDialogButtonBox.Cancel)
-        cancel_button.setText("Отмена")
-        cancel_button.setMinimumWidth(120)
-        cancel_button.setStyleSheet("""
-                    QPushButton {
-                        background-color: #6c757d;
-                        color: white;
-                        border: none;
-                        padding: 8px 20px;
-                        border-radius: 4px;
-                        font-weight: bold;
-                        min-width: 100px;
-                    }
-                    QPushButton:hover {
-                        background-color: #5a6268;
-                    }
-                """)
-
-        button_layout = QHBoxLayout()
-        button_layout.addStretch()
-        button_layout.addWidget(button_box)
-        layout.addLayout(button_layout)
-
-    def load_image(self):
-        file_path, _ = QFileDialog.getOpenFileName(
-            self,
-            "Выберите изображение",
-            "",
-            "Изображения (*.png *.jpg *.jpeg *.bmp *.gif);;Все файлы (*.*)"
-        )
-
-        if file_path:
-            self.selected_image_path = file_path
-            self.image_path_label.setText(f"✓ {file_path}")
-            self.image_path_label.setStyleSheet("color: #28a745; font-size: 11px; padding: 5px;")
-            print(f"Изображение загружено: {file_path}")
-
-    def get_updated_data(self):
-        return {
-            'article': self.product_data[0] if len(self.product_data) > 0 else '',
-            'name': self.name_edit.text().strip(),
-            'category': self.category_combo.currentText(),
-            'cost_price': self.cost_price.value(),
-            'selling_price': self.selling_price.value(),
-            'show_on_display': self.show_on_display.isChecked(),
-            'quantity': self.quantity_spin.value(),
-            'description': self.desc_input.text(),
-            'ingredients': self.ingredients_input.text(),
-            'calories': self.calories_spin.value(),
-            'fats': self.fats_spin.value(),
-            'proteins': self.proteins_spin.value(),
-            'carbs': self.carbs_spin.value(),
-            'image_path': self.selected_image_path
-        }
-
-    def accept(self):
-        #Валидация
-        if not self.name_edit.text().strip():
-            QMessageBox.warning(self, "Ошибка", "Наименование изделия не может быть пустым!")
-            return
-
-        if self.selling_price.value() <= 0:
-            reply = QMessageBox.question(
-                self,
-                "Подтверждение",
-                "Цена равна 0. Продолжить?",
-                QMessageBox.Yes | QMessageBox.No
-            )
-            if reply == QMessageBox.No:
-                return
-
-        super().accept()
-
-class CategoryViewDialog(QDialog): # Не используется
-    def __init__(self, category_data, parent=None):
-        super().__init__(parent)
-
-        self.category_data = category_data
-
-        self.setWindowTitle(f"Просмотр категории: {category_data[0]}")
-        self.setMinimumSize(500, 350)
-        self.setModal(True)
-
-        self.setStyleSheet("""
-            QDialog {
-                background-color: white;
-            }
-            QLabel {
-                font-size: 12px;
-            }
-            QLabel[heading="true"] {
-                font-size: 16px;
-                font-weight: bold;
-                color: #333;
-                margin-top: 10px;
-            }
-            QGroupBox {
-                font-weight: bold;
-                font-size: 13px;
-                border: 1px solid #ddd;
-                border-radius: 5px;
-                margin-top: 10px;
-                padding-top: 10px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px 0 5px;
-            }
-            QCheckBox::indicator:checked {
-                border: 1px solid #0078d7;
-                background-color: #0078d7;
-                border-radius: 3px;
-            }
-            QLineEdit, QSpinBox {
-                padding: 8px;
-                border: 1px solid #ddd;
-                border-radius: 4px;
-                font-size: 13px;
-            }
-            QLineEdit:focus, QSpinBox:focus {
-                border-color: #0078d7;
-            }
-        """)
-
-        self.init_ui()
-
-    def init_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setSpacing(15)
-
-        #Заголовок
-        title_label = QLabel(f"Категория: {self.category_data[0]}")
-        title_label.setProperty("heading", True)
-        title_label.setAlignment(Qt.AlignCenter)
-        title_label.setStyleSheet("font-size: 18px; color: #0078d7; margin-bottom: 10px;")
-        layout.addWidget(title_label)
-
-        #Информация о категории
-        info_group = QGroupBox("Информация о категории")
-        info_layout = QGridLayout(info_group)
-        info_layout.setVerticalSpacing(12)
-        info_layout.setHorizontalSpacing(20)
-
-        #Наименование
-        info_layout.addWidget(QLabel("Наименование:"), 0, 0)
-        info_layout.addWidget(QLineEdit(f"{self.category_data[0]}"), 0, 1)
-
-        #Порядок
-        info_layout.addWidget(QLabel("Порядок:"), 1, 0)
-        self.order_spin = QSpinBox()
-        self.order_spin.setRange(1, 100)
-
-
-        self.order_spin.setValue(self.category_data[1])
-
-        self.order_spin.setSuffix("")
-        info_layout.addWidget(self.order_spin, 1, 1)
-
-        #Отображение
-        self.show_on_display = QCheckBox("Отображать категорию")
-        self.show_on_display.setChecked(True)
-        info_layout.addWidget(self.show_on_display, 8, 0)
-
-        layout.addWidget(info_group)
-
-        #Кнопки
-        button_layout = QHBoxLayout()
-        button_layout.setSpacing(10)
-
-        self.save_button = QPushButton("Сохранить")
-        self.save_button.setObjectName("saveButton")
-        self.save_button.setStyleSheet("""
-                    QPushButton {
-                        background-color: #28a745;
-                        color: white;
-                        border: none;
-                        padding: 8px 20px;
-                        border-radius: 4px;
-                        font-weight: bold;
-                        min-width: 100px;
-                    }
-                    QPushButton:hover {
-                        background-color: #218838;
-                    }
-                """)
-
-        self.cancel_button = QPushButton("Отмена")
-        self.cancel_button.setObjectName("cancelButton")
-        self.cancel_button.clicked.connect(self.reject)
-        self.cancel_button.setStyleSheet("""
-                    QPushButton {
-                        background-color: #6c757d;
-                        color: white;
-                        border: none;
-                        padding: 8px 20px;
-                        border-radius: 4px;
-                        font-weight: bold;
-                        min-width: 100px;
-                    }
-                    QPushButton:hover {
-                        background-color: #5a6268;
-                    }
-                """)
-
-        button_layout.addWidget(self.save_button)
-        button_layout.addWidget(self.cancel_button)
-
-        layout.addLayout(button_layout)
-
-    def validate_and_accept(self):
-        if not self.name_input.text().strip():
-            QMessageBox.warning(self, "Ошибка", "Введите наименование категории")
-            self.name_input.setFocus()
-            return
-        
-        for cat in self.categories_data:
-            if cat[0] == self.name_input.text().strip():
-                QMessageBox.warning(self, "Ошибка", "Категория с таким названием существует")
-                self.name_input.setFocus()
-                return
-            if cat[-1] == self.order_spin.value():
-                QMessageBox.warning(self, "Ошибка", "Категория такого порядка существует")
-                self.order_spin.setFocus()
-                return
-
-        self.accept()
-
-    def get_category_data(self):
-        return {
-          'category_name': self.name_input.text().strip(), 
-          'category_description': None, 
-          'showing_number': self.order_spin.value(), 
-          'display_on_site': True, 
-          'id': self.order_spin.value()
         }
 
 
@@ -2014,9 +1510,9 @@ class CatalogPage(QWidget):
 
         filtered_data = []
         for item in self.all_catalog_data:
-            if (search_text in item[0].lower() or  #Поиск по артикулу
+            if (search_text in str(item[0]) or  #Поиск по артикулу
                 search_text in item[1].lower() or  #Поиск по названию
-                search_text in item[2].lower()):   #Поиск по категории
+                search_text in [c[0] for c in self.categories_data if c[-1]==item[2]][0].lower()):   #Поиск по категории
                 filtered_data.append(item)
 
         if filtered_data:
@@ -2037,22 +1533,6 @@ class CatalogPage(QWidget):
             self.update_categories_data()
             QMessageBox.information(self, "Успешно", f"Изделие '{product_data['name']}' добавлено!")
             self.populate_products_table()
-
-    def add_product(self, data):
-        new_article = str(int(self.all_catalog_data[-1][0]) + 1).zfill(3)
-
-        new_product = [
-            new_article,
-            data['name'],
-            data['category'],
-            f"{data['cost_price']:.2f}",
-            f"{data['selling_price']:.2f}",
-            data['tags'],
-            str(data['quantity'])
-        ]
-        self.all_catalog_data.append(new_product)
-        self.populate_products_table()
-        QMessageBox.information(self, "Успешно", f"Изделие '{data['name']}' добавлено!")
 
     #СТРАНИЦА КАТЕГОРИЙ
     def create_categories_page(self):
@@ -2142,9 +1622,9 @@ class CatalogPage(QWidget):
 
         #Таблица категорий
         self.categories_table = QTableWidget()
-        self.categories_table.setColumnCount(2)
+        self.categories_table.setColumnCount(3)
         self.categories_table.setHorizontalHeaderLabels([
-            "Наименование категории изделий", "Порядок категории"
+            "Наименование категории изделий", "Порядок категории", "ID"
         ])
 
         self.categories_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
@@ -2187,7 +1667,8 @@ class CatalogPage(QWidget):
         return page
 
     def on_category_double_clicked(self, row, column):
-        category_data = get_category(self.categories_data, int(self.categories_table.item(row, 1).text()))
+        category_data = get_category(self.categories_data, int(self.categories_table.item(row, 2).text()))
+        print(category_data)
         dialog = AddCategoryDialog(self, tag='R', category_data=category_data)
         if dialog.exec() == QDialog.Accepted:
             category_data = dialog.get_category_data()
@@ -2204,7 +1685,10 @@ class CatalogPage(QWidget):
 
         for row, cat_data in enumerate(data):
             for col, value in enumerate(cat_data):
-                item = QTableWidgetItem(str(value))
+                if col == 2:
+                    item = QTableWidgetItem(str(cat_data[-1]))
+                else:
+                    item = QTableWidgetItem(str(value))
 
                 item.setTextAlignment(Qt.AlignCenter)
                 self.categories_table.setItem(row, col, item)
@@ -2246,14 +1730,7 @@ class CatalogPage(QWidget):
     def update_categories_data(self):
         self.categories_data = category_dict_to_list(get_categories())
         self.populate_categories_table()
-
-    # Забраковали
-    def add_category(self, data):
-        new_category = [data['name'], str(data['order'])]
-        self.categories_data.append(new_category)
-        self.populate_categories_table()
         
-
 
 class AddEmployeeDialog(QDialog):
     def __init__(self, parent=None):
@@ -2343,7 +1820,8 @@ class AddEmployeeDialog(QDialog):
         #Должность
         form_layout.addWidget(QLabel("Должность:"), 7, 0)
         self.position_combo = QComboBox()
-        self.position_combo.addItems(["Администратор", "Менеджер"])
+        for i, p in enumerate(["Администратор", "Менеджер"]):
+            self.position_combo.addItem(p, i+1)
         form_layout.addWidget(self.position_combo, 7, 1)
 
         #Адрес филиала
@@ -2433,7 +1911,7 @@ class AddEmployeeDialog(QDialog):
         return {
             'full_name': f'{self.lastname_input.text().strip()} {self.firstname_input.text().strip()} {self.patronymic_input.text().strip()}',
             'phone': self.phone_input.text().strip(),
-            'position': self.position_combo.currentText(),
+            'position_id': self.position_combo.currentData(),
             'username': self.login_input.text().strip(),
             'password': self.password_input.text().strip(),
             'branch_id': self.branch_combo.currentData()
@@ -2580,8 +2058,10 @@ class EmployeeDetailDialog(QDialog):
         #Должность
         info_layout.addWidget(QLabel("Должность:"), 7, 0)
         self.position_combo = QComboBox()
-        self.position_combo.addItems(["Администратор", "Менеджер"])
-        self.position_combo.setCurrentText(self.employee_data[6] if len(self.employee_data) > 6 else "Менеджер")
+
+        for i, p in enumerate(["Администратор", "Менеджер"]):
+            self.position_combo.addItem(p, i+1)
+        self.position_combo.setCurrentIndex(self.employee_data[5]-1)
         info_layout.addWidget(self.position_combo, 7, 1)
 
         #Адрес филиала
@@ -2594,7 +2074,10 @@ class EmployeeDetailDialog(QDialog):
         self.branch_combo = QComboBox()
         for br in self.all_branches_data:
             self.branch_combo.addItem(br[0], br[-1])
+        i = self.branch_combo.findData(self.employee_data[7])
+        self.branch_combo.setCurrentIndex(i)
         self.on_item_changed()
+        self.branch_combo.currentIndexChanged.connect(self.on_item_changed)
         info_layout.addWidget(self.branch_combo, 8, 1)
 
         layout.addWidget(info_group)
@@ -2666,7 +2149,7 @@ class EmployeeDetailDialog(QDialog):
             'id': self.employee_id,
             'full_name': f'{self.lastname_input.text().strip()} {self.firstname_input.text().strip()} {self.patronymic_input.text().strip()}',
             'phone': self.phone_input.text().strip(),
-            'position': self.position_combo.currentText(),
+            'position_id': self.position_combo.currentData(),
             'username': self.login_input.text().strip(),
             'branch_id': self.branch_combo.currentData(),
             'work_address': self.work_address.text()
@@ -2812,9 +2295,10 @@ class EmployeesPage(QWidget):
 
         for row, emp_data in enumerate(data):
             for col, value in enumerate(emp_data):
-
-
-                item = QTableWidgetItem(str(value))
+                if col == 5:
+                    item = QTableWidgetItem(str(roles[value]))
+                else:
+                    item = QTableWidgetItem(str(value))
 
                 item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                 self.table.setItem(row, col, item)
@@ -2840,7 +2324,7 @@ class EmployeesPage(QWidget):
 
     def clear_search(self):
         self.search_input.clear()
-        self.filter_employees_by_status(self.status_filter.currentText())
+        self.populate_employees()
 
     def show_add_employee_dialog(self):
         dialog = AddEmployeeDialog(self)
@@ -2875,1095 +2359,6 @@ class EmployeesPage(QWidget):
         self.populate_employees()
 
 
-class UserDetailDialog(QDialog):
-    status_changed = Signal(str)
-
-    def __init__(self, user_data, parent=None):
-        super().__init__(parent)
-        self.user_data = user_data
-        self.setWindowTitle(f"Пользователь: {user_data[0]}")
-        self.setMinimumSize(500, 400)
-        self.setModal(True)
-
-        self.setStyleSheet("""
-            QDialog {
-                background-color: white;
-            }
-            QLabel {
-                font-size: 12px;
-            }
-            QLabel[heading="true"] {
-                font-size: 16px;
-                font-weight: bold;
-                color: #333;
-                margin-top: 10px;
-            }
-            QGroupBox {
-                font-weight: bold;
-                font-size: 13px;
-                border: 1px solid #ddd;
-                border-radius: 5px;
-                margin-top: 10px;
-                padding-top: 10px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px 0 5px;
-            }
-        """)
-
-        self.init_ui()
-
-    def init_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setSpacing(15)
-
-        #Заголовок с именем пользователя
-        title_label = QLabel(f"Пользователь: {self.user_data[0]}")
-        title_label.setProperty("heading", True)
-        title_label.setAlignment(Qt.AlignCenter)
-        title_label.setStyleSheet("font-size: 18px; color: #0078d7; margin-bottom: 10px;")
-        layout.addWidget(title_label)
-
-        #Информация о пользователе
-        info_group = QGroupBox("Информация о пользователе")
-        info_layout = QGridLayout(info_group)
-        info_layout.setVerticalSpacing(10)
-        info_layout.setHorizontalSpacing(20)
-
-        info_layout.addWidget(QLabel("Email:"), 0, 0)
-        info_layout.addWidget(QLabel(self.user_data[1]), 0, 1)
-
-        info_layout.addWidget(QLabel("Дата регистрации:"), 1, 0)
-        info_layout.addWidget(QLabel("15.03.2026"), 1, 1)
-
-        info_layout.addWidget(QLabel("Кол-во заказов:"), 2, 0)
-        info_layout.addWidget(QLabel("25"), 2, 1)
-
-        info_layout.addWidget(QLabel("Статус:"), 3, 0)
-
-        self.status_combo = QComboBox()
-        self.status_combo.addItems(["Активен", "Заблокирован"])
-        self.status_combo.setCurrentText(self.user_data[2])
-        info_layout.addWidget(self.status_combo, 3, 1)
-
-        layout.addWidget(info_group)
-
-        #Кнопки Ок и Отмена
-        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        button_box.accepted.connect(self.accept)
-        button_box.rejected.connect(self.reject)
-
-        ok_button = button_box.button(QDialogButtonBox.Ok)
-        ok_button.setText("Ок")
-        ok_button.setStyleSheet("""
-            QPushButton {
-                background-color: #0078d7;
-                color: white;
-                border: none;
-                padding: 8px 20px;
-                border-radius: 3px;
-                font-weight: bold;
-                min-width: 80px;
-            }
-            QPushButton:hover {
-                background-color: #005a9e;
-            }
-        """)
-
-        cancel_button = button_box.button(QDialogButtonBox.Cancel)
-        cancel_button.setText("Отмена")
-        cancel_button.setStyleSheet("""
-            QPushButton {
-                background-color: #6c757d;
-                color: white;
-                border: none;
-                padding: 8px 20px;
-                border-radius: 3px;
-                font-weight: bold;
-                min-width: 80px;
-            }
-            QPushButton:hover {
-                background-color: #5a6268;
-            }
-        """)
-
-        layout.addWidget(button_box)
-
-    def get_updated_status(self):
-        return self.status_combo.currentText()
-
-
-class UsersPage(QWidget):
-    def __init__(self):
-        super().__init__()
-        self.all_users_data = [
-            ["Козлов Сергей", "john@example.com", "Активен"],
-            ["Джейн Смит", "jane@example.com", "Активен"],
-            ["Боб Уилсон", "bob@example.com", "Заблокирован"],
-            ["Алиса Браун", "alice@example.com", "Активен"],
-            ["Чарли Дэвис", "charlie@example.com", "Активен"],
-            ["Ива Миллер", "eve@example.com", "Активен"],
-        ]
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(15)
-
-        title = QLabel("Все пользователи")
-        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #0078d7; margin-bottom: 10px;")
-        layout.addWidget(title)
-
-        #Панель поиска
-        search_layout = QHBoxLayout()
-
-        self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("Поиск пользователей по имени пользователя или почте...")
-        self.search_input.setFixedHeight(35)
-        self.search_input.setStyleSheet("""
-            QLineEdit {
-                border: 1px solid #ddd;
-                border-radius: 4px;
-                padding: 5px 10px;
-                font-size: 13px;
-            }
-        """)
-
-        search_btn = QPushButton("Поиск")
-        search_btn.setFixedSize(80, 35)
-        search_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #0078d7;
-                color: white;
-                border: none;
-                border-radius: 4px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #005a9e;
-            }
-        """)
-        search_btn.clicked.connect(self.search_users)
-
-        #Кнопка сброса поиска
-        clear_btn = QPushButton("✕")
-        clear_btn.setFixedSize(30, 30)
-        clear_btn.setCursor(Qt.PointingHandCursor)
-        clear_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #6c757d;
-                color: white;
-                border: none;
-                border-radius: 4px;
-                font-size: 14px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #5a6268;
-            }
-        """)
-        clear_btn.clicked.connect(self.clear_search)
-
-        search_layout.addWidget(self.search_input)
-        search_layout.addWidget(search_btn)
-        search_layout.addWidget(clear_btn)
-        search_layout.addStretch()
-
-        layout.addLayout(search_layout)
-
-        #Таблица пользователей
-        self.table = QTableWidget()
-        self.table.setColumnCount(3)
-        self.table.setHorizontalHeaderLabels([
-            "Имя пользователя", "Email", "Статус"
-        ])
-
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.table.verticalHeader().setVisible(False)
-        self.table.setAlternatingRowColors(True)
-        self.table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.table.setSelectionBehavior(QTableWidget.SelectRows)
-
-        self.table.setStyleSheet("""
-            QTableWidget {
-                gridline-color: #e0e0e0;
-                selection-background-color: #e6f2fa;
-                font-size: 12px;
-            }
-            QTableWidget::item {
-                padding: 6px;
-            }
-            QTableWidget::item:selected {
-                background-color: #0078d7;
-                color: white;
-            }
-            QHeaderView::section {
-                background-color: #f8f9fa;
-                padding: 6px;
-                border: none;
-                border-bottom: 2px solid #dee2e6;
-                font-weight: bold;
-                font-size: 11px;       
-            }
-        """)
-
-        self.populate_users()
-        self.table.cellDoubleClicked.connect(self.on_user_double_clicked)
-
-        layout.addWidget(self.table)
-
-    def populate_users(self, data=None):
-        if data is None:
-            data = self.all_users_data
-
-        self.table.setRowCount(len(data))
-
-        for row, user_data in enumerate(data):
-            for col, value in enumerate(user_data):
-                item = QTableWidgetItem(str(value))
-
-                if col == 0 or col == 2:
-                    item.setTextAlignment(Qt.AlignCenter)
-
-                if col == 2:
-                    if value == "Активен":
-                        item.setForeground(QColor("#28a745"))
-                        item.setBackground(QColor("#e8f5e9"))
-                    else:
-                        item.setForeground(QColor("#dc3545"))
-                        item.setBackground(QColor("#f8d7da"))
-
-                self.table.setItem(row, col, item)
-
-    def search_users(self):
-        search_text = self.search_input.text().lower()
-        if not search_text:
-            self.filter_users(self.filter_combo.currentText())
-            return
-
-        filtered_data = []
-        for user in self.all_users_data:
-            if (search_text in user[0].lower() or  # Поиск по имени
-                    search_text in user[1].lower()):  # Поиск по email
-                filtered_data.append(user)
-
-        if filtered_data:
-            current_filter = self.filter_combo.currentText()
-            if current_filter != "Все пользователи":
-                status_map = {
-                    "Активные": "Активен",
-                    "Заблокированные": "Заблокирован",
-                }
-                filter_status = status_map.get(current_filter)
-                if filter_status:
-                    filtered_data = [u for u in filtered_data if u[2] == filter_status]
-            self.populate_users(filtered_data)
-        else:
-            QMessageBox.information(self, "Поиск", "Ничего не найдено")
-            self.filter_users(self.filter_combo.currentText())
-
-    def clear_search(self):
-        self.search_input.clear()
-        self.filter_users(self.filter_combo.currentText())
-
-    def filter_users(self, filter_text):
-        if filter_text == "Все пользователи":
-            self.populate_users(self.all_users_data)
-        elif filter_text == "Активные":
-            filtered = [u for u in self.all_users_data if u[2] == "Активен"]
-            self.populate_users(filtered)
-        elif filter_text == "Заблокированные":
-            filtered = [u for u in self.all_users_data if u[2] == "Заблокирован"]
-            self.populate_users(filtered)
-        elif filter_text == "Новые":
-            filtered = self.all_users_data[:2]
-            for u in filtered:
-                u[2] = "Активен"
-            self.populate_users(filtered)
-
-    def on_user_double_clicked(self, row, column):
-        user_name = self.table.item(row, 0).text()
-        user_email = self.table.item(row, 1).text()
-        user_status = self.table.item(row, 2).text()
-
-        user_data = [user_name, user_email, user_status]
-        dialog = UserDetailDialog(user_data, self)
-
-        if dialog.exec() == QDialog.Accepted:
-            new_status = dialog.get_updated_status()
-            self.update_user_status(row, new_status)
-
-    def update_user_status(self, row, new_status):
-        user_name = self.table.item(row, 0).text()
-        for i, user in enumerate(self.all_users_data):
-            if user[0] == user_name:
-                self.all_users_data[i][2] = new_status
-                break
-
-        self.filter_users(self.filter_combo.currentText())
-
-
-
-class ReportsPage(QWidget):
-    def __init__(self):
-        super().__init__()
-
-        #Данные для отчетов
-        self.sales_data = [
-            {
-                'article': 'СБ-001',
-                'name': 'Синнабон Классический',
-                'total_sales': 145,
-                'cost': 174000,
-                'revenue': 217500,
-                'revenue_percent': 18.2,
-                'profit': 43500,
-                'profit_percent': 25.0
-            },
-            {
-                'article': 'СБ-002',
-                'name': 'Синнабон Шоколадный',
-                'total_sales': 132,
-                'cost': 158400,
-                'revenue': 198000,
-                'revenue_percent': 16.6,
-                'profit': 39600,
-                'profit_percent': 25.0
-            },
-            {
-                'article': 'КБ-001',
-                'name': 'Кремобон Ванильный',
-                'total_sales': 98,
-                'cost': 117600,
-                'revenue': 147000,
-                'revenue_percent': 12.3,
-                'profit': 29400,
-                'profit_percent': 25.0
-            },
-            {
-                'article': 'ПЖ-001',
-                'name': 'Пирожное Корзиночка',
-                'total_sales': 155,
-                'cost': 155000,
-                'revenue': 193750,
-                'revenue_percent': 16.2,
-                'profit': 38750,
-                'profit_percent': 25.0
-            },
-            {
-                'article': 'ТР-001',
-                'name': 'Торт Наполеон',
-                'total_sales': 63,
-                'cost': 126000,
-                'revenue': 157500,
-                'revenue_percent': 13.2,
-                'profit': 31500,
-                'profit_percent': 25.0
-            },
-            {
-                'article': 'НП-001',
-                'name': 'Капучино',
-                'total_sales': 258,
-                'cost': 77400,
-                'revenue': 129000,
-                'revenue_percent': 10.8,
-                'profit': 51600,
-                'profit_percent': 66.7
-            },
-        ]
-
-        #Данные по заведениям
-        self.branches_data = [
-            {
-                'branch': 'ТЦ "МЕГА"',
-                'total_sales': 452,
-                'revenue': 678000,
-                'revenue_percent': 28.5,
-                'profit': 169500,
-                'profit_percent': 25.0,
-                'avg_check': 1500
-            },
-            {
-                'branch': 'ТЦ "ГУМ"',
-                'total_sales': 389,
-                'revenue': 583500,
-                'revenue_percent': 24.5,
-                'profit': 145875,
-                'profit_percent': 25.0,
-                'avg_check': 1500
-            },
-            {
-                'branch': 'ТЦ "АВИАПАРК"',
-                'total_sales': 412,
-                'revenue': 618000,
-                'revenue_percent': 26.0,
-                'profit': 154500,
-                'profit_percent': 25.0,
-                'avg_check': 1500
-            },
-            {
-                'branch': 'ТЦ "ЕВРОПЕЙСКИЙ"',
-                'total_sales': 298,
-                'revenue': 447000,
-                'revenue_percent': 18.8,
-                'profit': 111750,
-                'profit_percent': 25.0,
-                'avg_check': 1500
-            },
-            {
-                'branch': 'ТЦ "РИО"',
-                'total_sales': 256,
-                'revenue': 384000,
-                'revenue_percent': 16.1,
-                'profit': 96000,
-                'profit_percent': 25.0,
-                'avg_check': 1500
-            },
-        ]
-
-        #Текущий активный отчет
-        self.current_report = "sales"
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(15)
-
-        #Панель статусов
-        self.create_status_bar(layout)
-
-        #Заголовок
-        self.title_label = QLabel("Общий отчёт по продажам")
-        self.title_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #0078d7; margin-bottom: 10px;")
-        layout.addWidget(self.title_label)
-
-        #Панель выбора периода
-        report_selection1 = QHBoxLayout()
-
-        self.report_type = QComboBox()
-        self.report_type.addItems([
-            "День",
-            "Неделя",
-            "Месяц",
-            "Квартал",
-            "Год"
-        ])
-        self.report_type.setFixedWidth(200)
-        self.report_type.setFixedHeight(35)
-        self.report_type.currentTextChanged.connect(self.on_period_changed)
-
-        self.date_from = QDateEdit()
-        self.date_from.setDate(QDate.currentDate().addDays(-30))
-        self.date_from.setCalendarPopup(True)
-        self.date_from.setFixedWidth(120)
-        self.date_from.setFixedHeight(35)
-
-        #Панель выбора группировки
-        self.report_group = QComboBox()
-        self.report_group.addItems([
-            "По филиалам",
-            "По категориям"
-        ])
-        self.report_group.setFixedWidth(200)
-        self.report_group.setFixedHeight(35)
-        self.report_group.currentTextChanged.connect(self.on_grouping_changed)
-
-        #Панель выбора сортировки
-        self.report_sort = QComboBox()
-        self.report_sort.addItems([
-            "По возрастанию",
-            "По убыванию"
-        ])
-        self.report_sort.setFixedWidth(200)
-        self.report_sort.setFixedHeight(35)
-
-        #Панель формирования отчёта
-        self.generate_btn = QPushButton("Сформировать отчет")
-        self.generate_btn.setFixedHeight(35)
-        self.generate_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #0078d7;
-                color: white;
-                border: none;
-                border-radius: 4px;
-                padding: 0 15px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #005a9e;
-            }
-        """)
-        self.generate_btn.clicked.connect(self.generate_report)
-
-        #Панель сохранения отчёта
-        self.export_btn = QPushButton("Сохранить отчет")
-        self.export_btn.setFixedHeight(35)
-        self.export_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #28a745;
-                color: white;
-                border: none;
-                border-radius: 4px;
-                padding: 0 15px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #218838;
-            }
-        """)
-        self.export_btn.clicked.connect(self.export_report)
-
-        #Добавляем элементы в layout
-        report_selection1.addWidget(QLabel("Период:"))
-        report_selection1.addWidget(self.report_type)
-        report_selection1.addWidget(QLabel("с"))
-        report_selection1.addWidget(self.date_from)
-        report_selection1.addStretch()
-        layout.addLayout(report_selection1)
-
-        report_selection2 = QHBoxLayout()
-        report_selection2.addWidget(QLabel("Группировать:"))
-        report_selection2.addWidget(self.report_group)
-        report_selection2.addStretch()
-        layout.addLayout(report_selection2)
-
-        report_selection3 = QHBoxLayout()
-        report_selection3.addWidget(QLabel("Сортировать:"))
-        report_selection3.addWidget(self.report_sort)
-        report_selection3.addStretch()
-        layout.addLayout(report_selection3)
-
-        report_selection4 = QHBoxLayout()
-        report_selection4.addWidget(self.generate_btn)
-        report_selection4.addWidget(self.export_btn)
-        report_selection4.addStretch()
-        layout.addLayout(report_selection4)
-
-        #Таблица
-        self.table = QTableWidget()
-        self.table.setAlternatingRowColors(True)
-        self.table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table.setSelectionMode(QTableWidget.SingleSelection)
-
-        self.table.setStyleSheet("""
-            QTableWidget {
-                gridline-color: #e0e0e0;
-                selection-background-color: #e6f2fa;
-                font-size: 12px;
-                border: 1px solid #ddd;
-                border-radius: 4px;
-            }
-            QTableWidget::item {
-                padding: 8px;
-            }
-            QTableWidget::item:selected {
-                background-color: #0078d7;
-                color: white;
-            }
-            QHeaderView::section {
-                background-color: #f8f9fa;
-                padding: 8px;
-                border: none;
-                border-bottom: 2px solid #dee2e6;
-                font-weight: bold;
-                font-size: 12px;
-            }
-        """)
-
-        layout.addWidget(self.table)
-
-        #Инициализация таблицы
-        self.setup_sales_table()
-
-    def create_status_bar(self, layout):
-        status_layout = QHBoxLayout()
-        status_layout.setSpacing(15)
-
-        self.status_buttons = {}
-        statuses = [
-            ("Отчёт по продажам", "sales"),
-            ("Отчёт по заведениям", "branches"),
-            ("Отчёт по изделиям", "categories")
-        ]
-
-        for status_text, status_key in statuses:
-            btn = QPushButton(status_text)
-            btn.setCursor(Qt.PointingHandCursor)
-            btn.setFlat(True)
-            btn.status_key = status_key
-
-            if status_key == "sales":
-                btn.setStyleSheet("""
-                    QPushButton {
-                        color: #0078d7;
-                        border-bottom: 2px solid #0078d7;
-                        padding: 5px 0px;
-                        font-size: 10px;
-                        font-weight: bold;
-                    }
-                """)
-            else:
-                btn.setStyleSheet("""
-                    QPushButton {
-                        color: #666;
-                        padding: 5px 0px;
-                        font-size: 10px;
-                    }
-                    QPushButton:hover {
-                        color: #0078d7;
-                    }
-                """)
-
-            btn.clicked.connect(lambda checked, s=status_key: self.on_status_filter_clicked(s))
-            self.status_buttons[status_key] = btn
-            status_layout.addWidget(btn)
-
-        status_layout.addStretch()
-        layout.addLayout(status_layout)
-
-    def setup_sales_table(self):
-        self.table.setColumnCount(8)
-        self.table.setHorizontalHeaderLabels([
-            "Артикул",
-            "Наименование",
-            "Кол-во продаж",
-            "Себестоимость",
-            "Выручка",
-            "Выручка %",
-            "Прибыль",
-            "Прибыль %"
-        ])
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.table.verticalHeader().setVisible(False)
-        self.populate_sales_table()
-
-    def setup_branches_table(self):
-        self.table.setColumnCount(7)
-        self.table.setHorizontalHeaderLabels([
-            "Наименование",
-            "Общее кол-во заказов",
-            "Кол-во  завершённых заказов",
-            "Кол-во отменённых заказов",
-            "Выручка",
-            "Выручка %",
-            "Прибыль",
-            "Прибыль %",
-            "Средний чек"
-        ])
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.table.verticalHeader().setVisible(False)
-        self.populate_branches_table()
-
-    def setup_categories_table(self):
-        self.table.setColumnCount(7)
-        self.table.setHorizontalHeaderLabels([
-            "Артикул",
-            "Общее кол-во продаж",
-            "Выручка",
-            "Выручка %",
-            "Прибыль",
-            "Прибыль %",
-            "Наценка %"
-        ])
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.table.verticalHeader().setVisible(False)
-        self.populate_categories_table()
-
-    def populate_sales_table(self, data=None):
-        if data is None:
-            data = self.sales_data
-
-        #Сортировка данных
-        sort_order = self.report_sort.currentText()
-        data = self.sort_data(data, sort_order)
-
-        self.table.setRowCount(len(data))
-
-        total_revenue = sum(item['revenue'] for item in data)
-
-        for row, item in enumerate(data):
-            #Артикул
-            self.table.setItem(row, 0, QTableWidgetItem(item['article']))
-
-            #Наименование
-            self.table.setItem(row, 1, QTableWidgetItem(item['name']))
-
-            #Кол-во продаж
-            sales_item = QTableWidgetItem(str(item['total_sales']))
-            sales_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            self.table.setItem(row, 2, sales_item)
-
-            #Себестоимость
-            cost_item = QTableWidgetItem(f"{item['cost']:,.0f}".replace(',', ' '))
-            cost_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            self.table.setItem(row, 3, cost_item)
-
-            #Выручка
-            revenue_item = QTableWidgetItem(f"{item['revenue']:,.0f}".replace(',', ' '))
-            revenue_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            self.table.setItem(row, 4, revenue_item)
-
-            #Выручка %
-            revenue_percent = (item['revenue'] / total_revenue * 100) if total_revenue > 0 else 0
-            percent_item = QTableWidgetItem(f"{revenue_percent:.1f}%")
-            percent_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            self.table.setItem(row, 5, percent_item)
-
-            #Прибыль
-            profit_item = QTableWidgetItem(f"{item['profit']:,.0f}".replace(',', ' '))
-            profit_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            if item['profit'] > 0:
-                profit_item.setForeground(QColor(40, 167, 69))
-            self.table.setItem(row, 6, profit_item)
-
-            #Прибыль %
-            profit_percent_item = QTableWidgetItem(f"{item['profit_percent']:.1f}%")
-            profit_percent_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            if item['profit_percent'] > 25:
-                profit_percent_item.setForeground(QColor(40, 167, 69))
-            elif item['profit_percent'] < 15:
-                profit_percent_item.setForeground(QColor(220, 53, 69))
-            self.table.setItem(row, 7, profit_percent_item)
-
-        self.add_sales_total_row(data)
-
-    def populate_branches_table(self, data=None):
-        if data is None:
-            data = self.branches_data
-
-        #Сортировка данных
-        sort_order = self.report_sort.currentText()
-        data = self.sort_data(data, sort_order, 'revenue')
-
-        self.table.setRowCount(len(data))
-
-        total_revenue = sum(item['revenue'] for item in data)
-
-        for row, item in enumerate(data):
-            #Заведение
-            self.table.setItem(row, 0, QTableWidgetItem(item['branch']))
-
-            #Кол-во продаж
-            sales_item = QTableWidgetItem(str(item['total_sales']))
-            sales_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            self.table.setItem(row, 1, sales_item)
-
-            #Выручка
-            revenue_item = QTableWidgetItem(f"{item['revenue']:,.0f}".replace(',', ' '))
-            revenue_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            self.table.setItem(row, 2, revenue_item)
-
-            #Выручка %
-            revenue_percent = (item['revenue'] / total_revenue * 100) if total_revenue > 0 else 0
-            percent_item = QTableWidgetItem(f"{revenue_percent:.1f}%")
-            percent_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            self.table.setItem(row, 3, percent_item)
-
-            #Прибыль
-            profit_item = QTableWidgetItem(f"{item['profit']:,.0f}".replace(',', ' '))
-            profit_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            if item['profit'] > 0:
-                profit_item.setForeground(QColor(40, 167, 69))
-            self.table.setItem(row, 4, profit_item)
-
-            #Прибыль %
-            profit_percent_item = QTableWidgetItem(f"{item['profit_percent']:.1f}%")
-            profit_percent_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            self.table.setItem(row, 5, profit_percent_item)
-
-            #Средний чек
-            avg_check_item = QTableWidgetItem(f"{item['avg_check']:,.0f}".replace(',', ' '))
-            avg_check_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            self.table.setItem(row, 6, avg_check_item)
-
-        self.add_branches_total_row(data)
-
-    def populate_categories_table(self, data=None):
-        if data is None:
-            data = self.categories_data
-
-        #Сортировка данных
-        sort_order = self.report_sort.currentText()
-        data = self.sort_data(data, sort_order, 'revenue')
-
-        self.table.setRowCount(len(data))
-
-        total_revenue = sum(item['revenue'] for item in data)
-
-        for row, item in enumerate(data):
-            #Категория
-            self.table.setItem(row, 0, QTableWidgetItem(item['category']))
-
-            #Кол-во продаж
-            sales_item = QTableWidgetItem(str(item['total_sales']))
-            sales_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            self.table.setItem(row, 1, sales_item)
-
-            #Выручка
-            revenue_item = QTableWidgetItem(f"{item['revenue']:,.0f}".replace(',', ' '))
-            revenue_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            self.table.setItem(row, 2, revenue_item)
-
-            #Выручка %
-            revenue_percent = (item['revenue'] / total_revenue * 100) if total_revenue > 0 else 0
-            percent_item = QTableWidgetItem(f"{revenue_percent:.1f}%")
-            percent_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            self.table.setItem(row, 3, percent_item)
-
-            #Прибыль
-            profit_item = QTableWidgetItem(f"{item['profit']:,.0f}".replace(',', ' '))
-            profit_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            if item['profit'] > 0:
-                profit_item.setForeground(QColor(40, 167, 69))
-            self.table.setItem(row, 4, profit_item)
-
-            #Прибыль %
-            profit_percent_item = QTableWidgetItem(f"{item['profit_percent']:.1f}%")
-            profit_percent_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            self.table.setItem(row, 5, profit_percent_item)
-
-            #Популярный товар
-            self.table.setItem(row, 6, QTableWidgetItem(item['popular_product']))
-
-        self.add_categories_total_row(data)
-
-    def add_sales_total_row(self, data):
-        total_sales = sum(item['total_sales'] for item in data)
-        total_cost = sum(item['cost'] for item in data)
-        total_revenue = sum(item['revenue'] for item in data)
-        total_profit = total_revenue - total_cost
-        avg_profit_percent = (total_profit / total_cost * 100) if total_cost > 0 else 0
-
-        self.table.setRowCount(self.table.rowCount() + 1)
-        row = self.table.rowCount() - 1
-        font = self.table.font()
-        font.setBold(True)
-
-        items = [
-            ("ИТОГО:", 0), ("", 1),
-            (f"{total_sales}", 2),
-            (f"{total_cost:,.0f}".replace(',', ' '), 3),
-            (f"{total_revenue:,.0f}".replace(',', ' '), 4),
-            ("100%", 5),
-            (f"{total_profit:,.0f}".replace(',', ' '), 6),
-            (f"{avg_profit_percent:.1f}%", 7)
-        ]
-
-        for text, col in items:
-            if text:
-                item = QTableWidgetItem(text)
-                item.setFont(font)
-                item.setBackground(QColor(248, 249, 250))
-                if col in [6, 7] and total_profit > 0:
-                    item.setForeground(QColor(40, 167, 69))
-                self.table.setItem(row, col, item)
-
-    def add_branches_total_row(self, data):
-        total_sales = sum(item['total_sales'] for item in data)
-        total_revenue = sum(item['revenue'] for item in data)
-        total_profit = sum(item['profit'] for item in data)
-        avg_check = total_revenue / total_sales if total_sales > 0 else 0
-
-        self.table.setRowCount(self.table.rowCount() + 1)
-        row = self.table.rowCount() - 1
-        font = self.table.font()
-        font.setBold(True)
-
-        items = [
-            ("ИТОГО:", 0),
-            (f"{total_sales}", 1),
-            (f"{total_revenue:,.0f}".replace(',', ' '), 2),
-            ("100%", 3),
-            (f"{total_profit:,.0f}".replace(',', ' '), 4),
-            (f"{(total_profit / total_revenue * 100):.1f}%" if total_revenue > 0 else "0%", 5),
-            (f"{avg_check:,.0f}".replace(',', ' '), 6)
-        ]
-
-        for text, col in items:
-            item = QTableWidgetItem(text)
-            item.setFont(font)
-            item.setBackground(QColor(248, 249, 250))
-            if col in [4, 5] and total_profit > 0:
-                item.setForeground(QColor(40, 167, 69))
-            self.table.setItem(row, col, item)
-
-    def add_categories_total_row(self, data):
-        total_sales = sum(item['total_sales'] for item in data)
-        total_revenue = sum(item['revenue'] for item in data)
-        total_profit = sum(item['profit'] for item in data)
-
-        self.table.setRowCount(self.table.rowCount() + 1)
-        row = self.table.rowCount() - 1
-        font = self.table.font()
-        font.setBold(True)
-
-        items = [
-            ("ИТОГО:", 0),
-            (f"{total_sales}", 1),
-            (f"{total_revenue:,.0f}".replace(',', ' '), 2),
-            ("100%", 3),
-            (f"{total_profit:,.0f}".replace(',', ' '), 4),
-            (f"{(total_profit / total_revenue * 100):.1f}%" if total_revenue > 0 else "0%", 5),
-            ("", 6)
-        ]
-
-        for text, col in items:
-            if text:
-                item = QTableWidgetItem(text)
-                item.setFont(font)
-                item.setBackground(QColor(248, 249, 250))
-                if col in [4, 5] and total_profit > 0:
-                    item.setForeground(QColor(40, 167, 69))
-                self.table.setItem(row, col, item)
-
-    def sort_data(self, data, sort_order, key='total_sales'):
-        reverse = (sort_order == "По убыванию")
-        return sorted(data, key=lambda x: x.get(key, 0), reverse=reverse)
-
-    def generate_report(self):
-        date_from = self.date_from.date().toString("dd.MM.yyyy")
-        date_to = self.date_to.date().toString("dd.MM.yyyy")
-
-        print(f"Генерация отчета:")
-        print(f"  Тип: {self.current_report}")
-        print(f"  Период: {date_from} - {date_to}")
-        print(f"  Группировка: {self.report_group.currentText()}")
-        print(f"  Сортировка: {self.report_sort.currentText()}")
-
-        #Обновляем таблицу в зависимости от текущего отчета
-        if self.current_report == "sales":
-            self.populate_sales_table()
-        elif self.current_report == "branches":
-            self.populate_branches_table()
-        elif self.current_report == "categories":
-            self.populate_categories_table()
-
-        QMessageBox.information(
-            self,
-            "Отчет сформирован",
-            f"Отчет '{self.get_report_title()}' успешно сформирован за период {date_from} - {date_to}"
-        )
-
-    def export_report(self):
-        file_path, _ = QFileDialog.getSaveFileName(
-            self,
-            "Сохранить отчет",
-            f"{self.get_report_filename()}_{QDate.currentDate().toString('dd_MM_yyyy')}.csv",
-            "CSV файлы (*.csv);;Excel файлы (*.xlsx);;Все файлы (*.*)"
-        )
-
-        if file_path:
-            try:
-                with open(file_path, 'w', newline='', encoding='utf-8-sig') as file:
-                    writer = csv.writer(file)
-
-                    # Записываем заголовки
-                    headers = [
-                        self.table.horizontalHeaderItem(i).text()
-                        for i in range(self.table.columnCount())
-                    ]
-                    writer.writerow(headers)
-
-                    #Записываем данные
-                    for row in range(self.table.rowCount()):
-                        row_data = []
-                        for col in range(self.table.columnCount()):
-                            item = self.table.item(row, col)
-                            row_data.append(item.text() if item else "")
-                        writer.writerow(row_data)
-
-                QMessageBox.information(
-                    self,
-                    "Экспорт завершен",
-                    f"Отчет успешно сохранен в файл:\n{file_path}"
-                )
-            except Exception as e:
-                QMessageBox.critical(
-                    self,
-                    "Ошибка экспорта",
-                    f"Не удалось сохранить отчет:\n{str(e)}"
-                )
-
-    def on_status_filter_clicked(self, status_key):
-        self.current_report = status_key
-
-        #Обновляем стили всех кнопок
-        for btn_status, btn in self.status_buttons.items():
-            if btn_status == status_key:
-                btn.setStyleSheet("""
-                    QPushButton {
-                        color: #0078d7;
-                        border-bottom: 2px solid #0078d7;
-                        padding: 5px 0px;
-                        font-size: 10px;
-                        font-weight: bold;
-                    }
-                """)
-            else:
-                btn.setStyleSheet("""
-                    QPushButton {
-                        color: #666;
-                        padding: 5px 0px;
-                        font-size: 10px;
-                    }
-                    QPushButton:hover {
-                        color: #0078d7;
-                    }
-                """)
-
-        #Загружаем соответствующий отчет
-        if status_key == "sales":
-            self.title_label.setText("Общий отчёт по продажам")
-            self.setup_sales_table()
-        elif status_key == "branches":
-            self.title_label.setText("Отчёт по заведениям")
-            self.setup_branches_table()
-        elif status_key == "categories":
-            self.title_label.setText("Отчёт по изделиям")
-            self.setup_categories_table()
-
-    def on_period_changed(self, period):
-        today = QDate.currentDate()
-
-        if period == "День":
-            self.date_from.setDate(today)
-            self.date_to.setDate(today)
-        elif period == "Неделя":
-            self.date_from.setDate(today.addDays(-7))
-            self.date_to.setDate(today)
-        elif period == "Месяц":
-            self.date_from.setDate(today.addMonths(-1))
-            self.date_to.setDate(today)
-        elif period == "Квартал":
-            self.date_from.setDate(today.addMonths(-3))
-            self.date_to.setDate(today)
-        elif period == "Год":
-            self.date_from.setDate(today.addYears(-1))
-            self.date_to.setDate(today)
-
-    def on_grouping_changed(self, grouping):
-        if grouping == "По заведениям" and self.current_report != "branches":
-            self.on_status_filter_clicked("branches")
-        elif grouping == "По категориям" and self.current_report != "categories":
-            self.on_status_filter_clicked("categories")
-
-    def get_report_title(self):
-        titles = {
-            "sales": "Отчет по продажам",
-            "branches": "Отчет по заведениям",
-            "categories": "Отчет по изделиям"
-        }
-        return titles.get(self.current_report, "Отчет")
-
-    def get_report_filename(self):
-        names = {
-            "sales": "report_sales",
-            "branches": "report_branches",
-            "categories": "report_categories"
-        }
-        return names.get(self.current_report, "report")
-
-
 class AddBakeryDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -3993,12 +2388,35 @@ class AddBakeryDialog(QDialog):
 
     def init_ui(self):
         layout = QVBoxLayout(self)
-        layout.setSpacing(15)
+        layout.setSpacing(5)
+
+        self.setStyleSheet("""
+            QDialog {
+                background-color: white;
+            }
+            QLabel {
+                font-size: 12px;
+            }
+            QLineEdit, QSpinBox {
+                padding: 8px;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                font-size: 13px;
+            }
+            QLineEdit:focus, QSpinBox:focus {
+                border-color: #0078d7;
+            }
+            QCheckBox::indicator:checked {
+            border: 1px solid #0078d7;
+            background-color: #0078d7;
+            border-radius: 3px;
+            }
+        """)
 
         #Заголовок
         title = QLabel("Добавление филиала")
         title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("font-size: 16px; font-weight: bold; color: #0078d7; margin-bottom: 10px;")
+        title.setStyleSheet("font-size: 16px; font-weight: bold; color: #0078d7;")
         layout.addWidget(title)
 
         #Форма
@@ -4026,9 +2444,9 @@ class AddBakeryDialog(QDialog):
         form_layout.addWidget(self.phone_input, 2, 1)
 
         #Статус
-        form_layout.addWidget(QLabel("Статус:"), 4, 0)
-        self.status_combo = QComboBox()
-        self.status_combo.addItems(["Открыт", "Закрыт"])
+        form_layout.addWidget(QLabel("Открыт:"), 4, 0)
+        self.status_combo = QCheckBox()
+        self.status_combo.setChecked(True)
         form_layout.addWidget(self.status_combo, 4, 1)
 
         layout.addWidget(form_widget)
@@ -4090,25 +2508,33 @@ class AddBakeryDialog(QDialog):
             self.phone_input.setFocus()
             return
 
+        if not bool(re.match(r"^\+\d{1,3}\(\d{3}\)\d{3}\-\d{2}\-\d{2}$" ,self.phone_input.text().strip())):
+            QMessageBox.warning(self, "Ошибка", "Введите телефон филиала корректно")
+            self.phone_input.setFocus()
+            return
+        
         self.accept()
 
     def get_bakery_data(self):
         return {
-            'name': self.name_input.text().strip(),
-            'address': self.address_input.text().strip(),
-            'phone': self.phone_input.text().strip(),
-            'status': self.status_combo.currentText(),
+            'branches_name': self.name_input.text().strip(),
+            'branches_address': self.address_input.text().strip(),
+            'branches_phone': self.phone_input.text().strip(),
+            'is_active_for_order': self.status_combo.isChecked()
         }
 
 
 class BakeryDetailDialog(QDialog):
-    status_changed = Signal(str)
-
-    def __init__(self, bakery_data, parent=None):
+    def __init__(self, branch_data, parent=None):
         super().__init__(parent)
-        self.bakery_data = bakery_data
-        self.setWindowTitle(f"Филиал: {bakery_data[0]}")
-        self.setMinimumSize(500, 400)
+        self.branch_id = branch_data.get('id', 0)
+        self.branch_name = branch_data.get('branches_name', '')
+        self.branch_address = branch_data.get('branches_address', '')
+        self.branch_phone = branch_data.get('branches_phone', '')
+        self.branch_status = branch_data.get('is_active_for_order', True)
+
+        self.setWindowTitle(f"Филиал: {self.branch_name}")
+        self.setMinimumSize(500, 450)
         self.setModal(True)
 
         self.setStyleSheet("""
@@ -4118,24 +2544,14 @@ class BakeryDetailDialog(QDialog):
             QLabel {
                 font-size: 12px;
             }
-            QLabel[heading="true"] {
-                font-size: 16px;
-                font-weight: bold;
-                color: #333;
-                margin-top: 10px;
-            }
-            QGroupBox {
-                font-weight: bold;
-                font-size: 13px;
+            QLineEdit, QComboBox {
+                padding: 8px;
                 border: 1px solid #ddd;
-                border-radius: 5px;
-                margin-top: 10px;
-                padding-top: 10px;
+                border-radius: 4px;
+                font-size: 13px;
             }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px 0 5px;
+            QLineEdit:focus, QComboBox:focus {
+                border-color: #0078d7;
             }
         """)
 
@@ -4143,65 +2559,72 @@ class BakeryDetailDialog(QDialog):
 
     def init_ui(self):
         layout = QVBoxLayout(self)
-        layout.setSpacing(15)
+        layout.setSpacing(5)
 
-        #Заголовок с названием филиала
-        title_label = QLabel(f"Филиал: {self.bakery_data[0]}")
-        title_label.setProperty("heading", True)
+        self.setStyleSheet("""
+            QDialog {
+                background-color: white;
+            }
+            QLabel {
+                font-size: 12px;
+            }
+            QLineEdit, QSpinBox {
+                padding: 8px;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                font-size: 13px;
+            }
+            QLineEdit:focus, QSpinBox:focus {
+                border-color: #0078d7;
+            }
+            QCheckBox::indicator:checked {
+            border: 1px solid #0078d7;
+            background-color: #0078d7;
+            border-radius: 3px;
+            }
+        """)
+
+        # Заголовок
+        title_label = QLabel(f"Филиал: {self.branch_name} | ID: {self.branch_id}")
         title_label.setAlignment(Qt.AlignCenter)
-        title_label.setStyleSheet("font-size: 18px; color: #0078d7; margin-bottom: 10px;")
+        title_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #0078d7;")
         layout.addWidget(title_label)
 
-        #Информация о филиале
-        info_group = QGroupBox("Информация о филиале")
-        info_layout = QGridLayout(info_group)
-        info_layout.setVerticalSpacing(10)
-        info_layout.setHorizontalSpacing(20)
+        # Форма
+        form_widget = QWidget()
+        form_layout = QGridLayout(form_widget)
+        form_layout.setVerticalSpacing(15)
+        form_layout.setHorizontalSpacing(10)
 
-        info_layout.addWidget(QLabel("Адрес:"), 0, 0)
-        self.address_input = QLineEdit(self.bakery_data[1])
-        self.address_input.setStyleSheet("""
-            QLineEdit {
-                border: 1px solid #ddd;
-                border-radius: 4px;
-                padding: 8px;
-                font-size: 13px;
-            }
-        """)
-        info_layout.addWidget(self.address_input, 0, 1)
+        # Название (только чтение)
+        form_layout.addWidget(QLabel("Наименование:"), 0, 0)
+        name_label = QLabel(self.branch_name)
+        name_label.setStyleSheet("font-weight: bold; color: #0078d7;")
+        form_layout.addWidget(name_label, 0, 1)
 
-        info_layout.addWidget(QLabel("Телефон:"), 1, 0)
-        self.phone_input = QLineEdit(self.bakery_data[2])
-        self.phone_input.setStyleSheet("""
-            QLineEdit {
-                border: 1px solid #ddd;
-                border-radius: 4px;
-                padding: 8px;
-                font-size: 13px;
-            }
-        """)
-        info_layout.addWidget(self.phone_input, 1, 1)
+        # Адрес
+        form_layout.addWidget(QLabel("Адрес:*"), 1, 0)
+        self.address_input = QLineEdit(self.branch_address)
+        self.address_input.setPlaceholderText("Введите полный адрес")
+        form_layout.addWidget(self.address_input, 1, 1)
 
-        info_layout.addWidget(QLabel("Статус:"), 2, 0)
+        # Телефон
+        form_layout.addWidget(QLabel("Телефон:*"), 2, 0)
+        self.phone_input = QLineEdit(self.branch_phone)
+        self.phone_input.setPlaceholderText("+7(999)123-45-67")
+        form_layout.addWidget(self.phone_input, 2, 1)
 
-        self.status_combo = QComboBox()
-        self.status_combo.addItems(["Открыт", "Закрыт"])
-        self.status_combo.setCurrentText(self.bakery_data[3])
-        self.status_combo.setStyleSheet("""
-            QComboBox {
-                padding: 8px;
-                border: 1px solid #ddd;
-                border-radius: 4px;
-                font-size: 13px;
-            }
-        """)
-        info_layout.addWidget(self.status_combo, 2, 1)
+        # Статус
+        form_layout.addWidget(QLabel("Открыт:"), 3, 0)
+        self.status_combo = QCheckBox()
+        self.status_combo.setChecked(True)
+        form_layout.addWidget(self.status_combo, 3, 1)
 
-        layout.addWidget(info_group)
+        layout.addWidget(form_widget)
 
-        #Кнопки Ок и Отмена
+        # Кнопки
         button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        button_box.accepted.connect(self.accept)
+        button_box.accepted.connect(self.validate_and_accept)
         button_box.rejected.connect(self.reject)
 
         ok_button = button_box.button(QDialogButtonBox.Ok)
@@ -4240,37 +2663,48 @@ class BakeryDetailDialog(QDialog):
 
         layout.addWidget(button_box)
 
+    def validate_and_accept(self):
+        if not self.address_input.text().strip():
+            QMessageBox.warning(self, "Ошибка", "Введите адрес филиала")
+            self.address_input.setFocus()
+            return
+
+        if not self.phone_input.text().strip():
+            QMessageBox.warning(self, "Ошибка", "Введите телефон филиала")
+            self.phone_input.setFocus()
+            return
+
+        if not bool(re.match(r"^\+\d{1,3}\(\d{3}\)\d{3}\-\d{2}\-\d{2}$" ,self.phone_input.text().strip())):
+            QMessageBox.warning(self, "Ошибка", "Введите телефон филиала корректно")
+            self.phone_input.setFocus()
+            return
+
+        self.accept()
+
     def get_updated_data(self):
         return {
-            'address': self.address_input.text(),
-            'phone': self.phone_input.text(),
-            'status': self.status_combo.currentText()
+            'branches_name': self.branch_name,
+            'branches_address': self.address_input.text().strip(),
+            'branches_phone': self.phone_input.text().strip(),
+            'is_active_for_order': self.status_combo.isChecked()
         }
 
 
 class BakeriesPage(QWidget):
     def __init__(self):
         super().__init__()
-        #Данные филиалов
-        self.bakeries_data = [
-            ["Дульсе", "С. Молочное Ул. Попова 17", "+7(999)111-22-33", "Открыт"],
-            ["Звукоуловитель", "ул. Ленина, 24", "+7(999)222-33-44", "Открыт"],
-            ["Октябрьский", "пр. Мира, 5", "+7(999)333-44-55", "Закрыт"],
-            ["Нагорный", "ул. Советская, 12", "+7(999)444-55-66", "Открыт"],
-            ["Европейский", "ул. Гагарина, 8", "+7(999)555-66-77", "Открыт"],
-            ["Волкова", "ул. Пушкина, 3", "+7(999)666-77-88", "Открыт"],
-        ]
+        self.bakeries_data = []
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(15)
 
-        #Заголовок
+        # Заголовок
         title = QLabel("Все филиалы")
         title.setStyleSheet("font-size: 18px; font-weight: bold; color: #0078d7; margin-bottom: 10px;")
         layout.addWidget(title)
 
-        #Поиск и кнопки
+        # Поиск и кнопки
         search_layout = QHBoxLayout()
 
         self.search_input = QLineEdit()
@@ -4301,9 +2735,9 @@ class BakeriesPage(QWidget):
         """)
         search_btn.clicked.connect(self.search_bakeries)
 
-        self.add_btn = QPushButton("+ Добавить филиал")
-        self.add_btn.setFixedHeight(35)
-        self.add_btn.setStyleSheet("""
+        add_btn = QPushButton("+ Добавить филиал")
+        add_btn.setFixedHeight(35)
+        add_btn.setStyleSheet("""
             QPushButton {
                 background-color: #28a745;
                 color: white;
@@ -4316,9 +2750,27 @@ class BakeriesPage(QWidget):
                 background-color: #218838;
             }
         """)
-        self.add_btn.clicked.connect(self.show_add_bakery_dialog)
+        add_btn.clicked.connect(self.show_add_bakery_dialog)
 
-        #Кнопка сброса поиска
+        refresh_btn = QPushButton("⟳")
+        refresh_btn.setFixedSize(35, 35)
+        refresh_btn.setCursor(Qt.PointingHandCursor)
+        refresh_btn.setToolTip("Обновить данные")
+        refresh_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #0078d7;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                font-size: 16px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #005a9e;
+            }
+        """)
+        refresh_btn.clicked.connect(self.load_branches_from_api)
+
         clear_btn = QPushButton("✕")
         clear_btn.setFixedSize(30, 30)
         clear_btn.setCursor(Qt.PointingHandCursor)
@@ -4341,22 +2793,24 @@ class BakeriesPage(QWidget):
         search_layout.addWidget(search_btn)
         search_layout.addWidget(clear_btn)
         search_layout.addStretch()
-        search_layout.addWidget(self.add_btn)
+        search_layout.addWidget(refresh_btn)
+        search_layout.addWidget(add_btn)
 
         layout.addLayout(search_layout)
 
-        #Таблица филиалов
+        # Таблица филиалов
         self.table = QTableWidget()
-        self.table.setColumnCount(4)
+        self.table.setColumnCount(5)
         self.table.setHorizontalHeaderLabels([
-            "Наименование", "Адрес", "Телефон", "Статус"
+            "ID", "Наименование", "Адрес", "Телефон", "Статус"
         ])
 
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table.verticalHeader().setVisible(False)
         self.table.setAlternatingRowColors(True)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table.setSelectionMode(QTableWidget.SingleSelection)
+        self.table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.table.cellDoubleClicked.connect(self.on_bakery_double_clicked)
 
         self.table.setStyleSheet("""
             QTableWidget {
@@ -4381,12 +2835,36 @@ class BakeriesPage(QWidget):
             }
         """)
 
-        self.table.cellDoubleClicked.connect(self.on_bakery_double_clicked)
-
-        #Заполнение данными
-        self.populate_bakeries()
-
         layout.addWidget(self.table)
+
+        # Загружаем данные
+        self.load_branches_from_api()
+
+    def load_branches_from_api(self):
+        try:
+            response = get_branches()
+
+            # API возвращает {"branches": [...]}
+            if isinstance(response, dict) and 'branches' in response:
+                branches = response['branches']
+            else:
+                branches = response if isinstance(response, list) else []
+
+            # Преобразуем в формат для таблицы
+            self.bakeries_data = []
+            for branch in branches:
+                self.bakeries_data.append({
+                    'id': branch.get('id', 0),
+                    'branches_name': branch.get('branches_name', ''),
+                    'branches_address': branch.get('branches_address', ''),
+                    'branches_phone': branch.get('branches_phone', ''),
+                    'is_active_for_order': branch.get('is_active_for_order', True)
+                })
+
+            self.populate_bakeries()
+
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Не удалось загрузить филиалы:\n{str(e)}")
 
     def populate_bakeries(self, data=None):
         if data is None:
@@ -4395,33 +2873,83 @@ class BakeriesPage(QWidget):
         self.table.setRowCount(len(data))
 
         for row, bakery_data in enumerate(data):
-            for col, value in enumerate(bakery_data):
-                item = QTableWidgetItem(str(value))
+            # ID
+            id_item = QTableWidgetItem(str(bakery_data.get('id', '')))
+            id_item.setTextAlignment(Qt.AlignCenter)
+            self.table.setItem(row, 0, id_item)
 
-                if col == 3:
-                    item.setTextAlignment(Qt.AlignCenter)
-                    if value == "Открыт":
-                        item.setForeground(QColor("#28a745"))
-                    else:
-                        item.setForeground(QColor("#dc3545"))
+            # Наименование
+            self.table.setItem(row, 1, QTableWidgetItem(bakery_data.get('branches_name', '')))
 
-                self.table.setItem(row, col, item)
+            # Адрес
+            self.table.setItem(row, 2, QTableWidgetItem(bakery_data.get('branches_address', '')))
+
+            # Телефон
+            self.table.setItem(row, 3, QTableWidgetItem(bakery_data.get('branches_phone', '')))
+
+            # Статус
+            status = bakery_data.get('is_active_for_order', True)
+            status_item = QTableWidgetItem(status)
+            status_item.setTextAlignment(Qt.AlignCenter)
+
+            if status == True:
+                status_item.setText('Открыт')
+                status_item.setForeground(QColor("#28a745"))
+                status_item.setBackground(QColor("#e8f5e9"))
+            else:
+                status_item.setText('Закрыт')
+                status_item.setForeground(QColor("#dc3545"))
+                status_item.setBackground(QColor("#f8d7da"))
+
+            self.table.setItem(row, 4, status_item)
 
     def show_add_bakery_dialog(self):
         dialog = AddBakeryDialog(self)
         if dialog.exec() == QDialog.Accepted:
             bakery_data = dialog.get_bakery_data()
-            self.add_bakery(bakery_data)
+            self.add_branch(bakery_data)
 
-    def add_bakery(self, data):
-        new_bakery = [
-            data['name'],
-            data['address'],
-            data['phone'],
-            data['status']
-        ]
-        self.bakeries_data.append(new_bakery)
-        self.populate_bakeries()
+    def add_branch(self, data):
+        try:
+            payload = {
+                'branches_name': data['branches_name'],
+                'branches_address': data['branches_address'],
+                'branches_phone': data['branches_phone'],
+                'is_active_for_order': data['is_active_for_order']
+            }
+
+            post_branch(payload)
+            self.load_branches_from_api()
+            QMessageBox.information(self, "Успешно", f"Филиал '{data['branches_name']}' добавлен!")
+
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Не удалось добавить филиал:\n{str(e)}")
+
+    def on_bakery_double_clicked(self, row, column):
+        branch_data = self.bakeries_data[row]
+
+        dialog = BakeryDetailDialog(branch_data, self)
+
+        if dialog.exec() == QDialog.Accepted:
+            updated_data = dialog.get_updated_data()
+            self.update_branch(branch_data['id'], updated_data)
+
+    def update_branch(self, branch_id, updated_data):
+        try:
+            payload = {
+                'id': branch_id,
+                'branches_name': updated_data['branches_name'],
+                'branches_address': updated_data['branches_address'],
+                'branches_phone': updated_data['branches_phone'],
+                'is_active_for_order': updated_data['is_active_for_order']
+            }
+
+            put_branch(payload)
+            self.load_branches_from_api()
+            QMessageBox.information(self, "Успешно", "Данные филиала обновлены!")
+
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Не удалось обновить филиал:\n{str(e)}")
 
     def search_bakeries(self):
         search_text = self.search_input.text().lower()
@@ -4431,9 +2959,9 @@ class BakeriesPage(QWidget):
 
         filtered_data = []
         for bakery in self.bakeries_data:
-            if (search_text in bakery[0].lower() or  #Поиск по названию
-                    search_text in bakery[1].lower() or  #Поиск по адресу
-                    search_text in bakery[2].lower()):  #Поиск по телефону
+            if (search_text in bakery.get('branches_name', '').lower() or
+                    search_text in bakery.get('branches_address', '').lower() or
+                    search_text in bakery.get('branches_phone', '').lower()):
                 filtered_data.append(bakery)
 
         if filtered_data:
@@ -4444,30 +2972,6 @@ class BakeriesPage(QWidget):
 
     def clear_search(self):
         self.search_input.clear()
-        self.populate_bakeries()
-
-    def on_bakery_double_clicked(self, row, column):
-        bakery_name = self.table.item(row, 0).text()
-        bakery_address = self.table.item(row, 1).text()
-        bakery_phone = self.table.item(row, 2).text()
-        bakery_status = self.table.item(row, 3).text()
-
-        bakery_data = [bakery_name, bakery_address, bakery_phone, bakery_status]
-        dialog = BakeryDetailDialog(bakery_data, self)
-
-        if dialog.exec() == QDialog.Accepted:
-            updated_data = dialog.get_updated_data()
-            self.update_bakery_data(row, updated_data)
-
-    def update_bakery_data(self, row, updated_data):
-        bakery_name = self.table.item(row, 0).text()
-        for i, bakery in enumerate(self.bakeries_data):
-            if bakery[0] == bakery_name:
-                self.bakeries_data[i][1] = updated_data['address']
-                self.bakeries_data[i][2] = updated_data['phone']
-                self.bakeries_data[i][3] = updated_data['status']
-                break
-
         self.populate_bakeries()
 
 
@@ -4495,16 +2999,12 @@ class MainApplication(QMainWindow):
         self.orders_page = OrdersScreen()
         self.catalog_page = CatalogPage()
         self.employees_page = EmployeesPage()
-        self.users_page = UsersPage()
-        self.reports_page = ReportsPage()
         self.bakeries_page = BakeriesPage()
 
         #Добавление страниц в стек
         self.stacked_widget.addWidget(self.orders_page)
         self.stacked_widget.addWidget(self.catalog_page)
         self.stacked_widget.addWidget(self.employees_page)
-        self.stacked_widget.addWidget(self.users_page)
-        self.stacked_widget.addWidget(self.reports_page)
         self.stacked_widget.addWidget(self.bakeries_page)
 
         #Показываем страницу заказов по умолчанию
@@ -4518,7 +3018,7 @@ class MainApplication(QMainWindow):
         navbar_layout.setSpacing(20)
 
         self.nav_buttons = {}
-        sections = ["Заказы", "Каталог", "Сотрудники", "Пользователи", "Отчёты", "Филиалы"]
+        sections = ["Заказы", "Каталог", "Сотрудники", "Филиалы"]
 
         for section in sections:
             btn = QPushButton(section)
@@ -4581,10 +3081,6 @@ class MainApplication(QMainWindow):
             self.stacked_widget.setCurrentWidget(self.catalog_page)
         elif page_name == "Сотрудники":
             self.stacked_widget.setCurrentWidget(self.employees_page)
-        elif page_name == "Пользователи":
-            self.stacked_widget.setCurrentWidget(self.users_page)
-        elif page_name == "Отчёты":
-            self.stacked_widget.setCurrentWidget(self.reports_page)
         elif page_name == "Филиалы":
             self.stacked_widget.setCurrentWidget(self.bakeries_page)
 
@@ -4780,9 +3276,9 @@ class ApplicationController:
         self.main_window = None
 
     def show_main_window(self):
-        if session_access == "Администратор":
+        if session_access == 1:
             self.main_window = MainApplication()
-        elif session_access == "Менеджер":
+        elif session_access == 2:
             self.main_window = MainApplicationManager()
         self.main_window.show()
 
@@ -4843,7 +3339,6 @@ def category_dict_to_list(dict):
         cat_data = [
             c.get("category_name", ""),
             c.get("showing_number", 0),
-            c.get("category_description", ""),
             c.get("display_on_site", True),
             c.get("id", 0)
         ]
@@ -4877,7 +3372,7 @@ def emp_to_list(dict):
                 employee.get("id", 0),
                 employee.get("full_name", ""),
                 employee.get("phone", ""),
-                employee.get("position", ""),
+                employee.get("position_id", 0),
                 employee.get("username", ""),
                 employee.get("branch_id", 0),
                 employee.get("work_address", ""),
@@ -4892,7 +3387,7 @@ def emp_to_list(dict):
             employees.get("id", 0),
             employees.get("full_name", ""),
             employees.get("phone", ""),
-            employees.get("position", ""),
+            employees.get("position_id", 0),
             employees.get("username", ""),
             employees.get("branch_id", 0),
             employees.get("work_address", ""),
