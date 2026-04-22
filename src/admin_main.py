@@ -2387,7 +2387,7 @@ class EmployeesPage(QWidget):
         filtered_data = []
         for emp in self.employees_data:
             full_name = emp['full_name'].lower()
-            if (search_text in emp['id'] or # Поиск по ID
+            if (
                     search_text in full_name or  # Поиск по ФИО
                     search_text in emp['phone'].lower() or  # Поиск по телефону
                     search_text in emp['position_name'].lower()):  # Поиск по должности
@@ -2997,7 +2997,8 @@ class BakeriesPage(QWidget):
 
         filtered_data = []
         for bakery in self.bakeries_data:
-            if (search_text in bakery.get('branches_name', '').lower() or
+            if (
+                    search_text in bakery.get('branches_name', '').lower() or
                     search_text in bakery.get('branches_address', '').lower() or
                     search_text in bakery.get('branches_phone', '').lower()):
                 filtered_data.append(bakery)
