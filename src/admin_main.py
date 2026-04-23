@@ -7,7 +7,7 @@ from PySide6.QtWidgets import (
     QPushButton, QLineEdit, QTableWidget, QTableWidgetItem, QHeaderView,
     QLabel, QFrame, QDialog, QGridLayout, QComboBox, QMessageBox,
     QDialogButtonBox, QGroupBox, QStackedWidget, QSpinBox, QDoubleSpinBox,
-    QCheckBox
+    QCheckBox, QPlainTextEdit
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor
@@ -308,6 +308,16 @@ class OrderDetailDialog(QDialog):
 
         items_layout.addWidget(self.items_table)
         layout.addWidget(items_group)
+
+        #Комментарий
+        comm_group = QGroupBox("Комментарий к заказу")
+        comm_layout = QVBoxLayout(comm_group)
+
+        self.comm_text = QPlainTextEdit()
+        self.comm_text.setPlainText(self.order_data['order_comment'])
+        self.comm_text.setReadOnly(True)
+        comm_layout.addWidget(self.comm_text)
+        layout.addWidget(comm_group)
 
         #Сумма заказа
         total_frame = QFrame()

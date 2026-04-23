@@ -1,9 +1,6 @@
 from api_client import APIClient
 from config import SERVER_HOST, SERVER_PORT
 
-import json
-import requests
-
 client  = APIClient(f"http://{SERVER_HOST}:{SERVER_PORT}")
 
 # ТОВАРЫ
@@ -75,36 +72,3 @@ def post_branch(data):
 
 def put_branch(data):
     return client.put_json(f'/admin/branches/update', data=data)
-
-
-def save_response_to_json(response: requests.Response, filename: str = None):
-    if filename is None:
-        filename = f"response.json"
-    
-    try:
-        # Получаем JSON данные из response
-        data = response
-        
-        # Записываем в файл с форматированием
-        with open(filename, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=4)
-        
-        print(f"Response сохранен в файл: {filename}")
-        return filename
-    
-    except json.JSONDecodeError:
-        print("Response не содержит JSON данных")
-        return None
-
-#save_response_to_json(get_branches())
-
-# data = {
-#     'full_name': 'admin',
-#     'phone': '+79999999999',
-#     'position_id': 1,
-#     'username': '111',
-#     'password': '111',
-#     'branch_id': 1
-# }
-
-# post_employee(data=data)
